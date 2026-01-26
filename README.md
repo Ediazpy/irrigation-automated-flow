@@ -1,170 +1,77 @@
-# Irrigation Automated Flow
+# IAF App - Irrigation Automated Flow
 
-A Flutter-based mobile application for irrigation field service management. Converted from the original Python CLI application.
+Commercial Irrigation Management System
 
-## Overview
+## Live Web App
 
-Irrigation Automated Flow Mobile is a comprehensive field service management application designed for THRIVE Outdoor Solutions. It enables managers and technicians to coordinate irrigation system inspections, track repairs, and manage billing.
+**Access the app at:** https://ediazpy.github.io/irrigation-automated-flow/
+
+### Install on Your Device (PWA)
+
+**iPhone (Safari):**
+1. Open Safari and go to https://ediazpy.github.io/irrigation-automated-flow/
+2. Tap the Share button (square with arrow)
+3. Tap "Add to Home Screen"
+4. Name it "IAF App" and tap Add
+
+**Android (Chrome):**
+1. Open Chrome and go to https://ediazpy.github.io/irrigation-automated-flow/
+2. Tap the menu (3 dots)
+3. Tap "Add to Home screen"
+4. Name it "IAF App" and tap Add
 
 ## Features
 
-### For Managers
-- **Repair Items Management**: View, add, update, and delete repair items with pricing
-- **Property Management**: Create and view irrigation properties with detailed zone information
-- **Inspection Assignment**: Assign inspections to technicians
-- **Completed Inspections**: Review completed inspections ready for billing
-- **Inspection History**: View all inspection records
-- **User Management**: Create and manage technician and manager accounts
+### Manager Features
+- **Properties**: Manage commercial properties with multiple controllers, zones, and client contacts
+- **Scheduling**: Bulk schedule inspections with monthly billing cycles
+- **Review**: Review technician inspections, adjust pricing, add labor charges
+- **Quotes**: Create professional quotes, send via email/SMS, track status
+- **Repair Tasks**: Schedule approved repairs for technicians
+- **Reports**: Monthly inspection reports and history
+- **Users**: Manage technicians with password reset via security questions
+- **Settings**: Company branding, contact info, default terms
 
-### For Technicians
+### Technician Features
 - **My Inspections**: View assigned inspections
-- **Start/Continue Inspection**: Work on assigned inspections
-- **New Property Inspection**: Create new properties on-the-fly and start inspections
-- **Walk Zones**: Navigate through property zones and log repairs
-- **My Completed**: Track completed work
+- **Start Inspection**: Work through zones, document repairs
+- **New Property**: Create property and start inspection
+- **My Completed**: View completed work for current month
+- **Repair Tasks**: View and complete assigned repair tasks
 
-## Installation
+### Quote Workflow
+1. Technician completes inspection and submits for review
+2. Manager reviews, adjusts pricing, adds labor/discount
+3. Manager sends quote to client via email or SMS
+4. Client views quote, signs digitally, approves or rejects
+5. Manager schedules approved repairs
+6. Technician completes repair tasks
 
-### Prerequisites
-- Flutter SDK (3.0.0 or higher)
-- Android Studio / Xcode (for mobile development)
-- A physical device or emulator
-
-### Setup Steps
-
-1. **Clone or navigate to the project directory**
-   ```bash
-   cd irritrack_mobile
-   ```
-
-2. **Install dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Run the application**
-   ```bash
-   flutter run
-   ```
-
-## Project Structure
-
-```
-irritrack_mobile/
-├── lib/
-│   ├── models/               # Data models
-│   │   ├── user.dart
-│   │   ├── property.dart
-│   │   ├── zone.dart
-│   │   ├── inspection.dart
-│   │   ├── repair.dart
-│   │   └── repair_item.dart
-│   ├── services/             # Business logic
-│   │   ├── storage_service.dart
-│   │   └── auth_service.dart
-│   ├── screens/              # UI screens
-│   │   ├── login_screen.dart
-│   │   ├── manager_home_screen.dart
-│   │   ├── technician_home_screen.dart
-│   │   ├── manager/          # Manager-specific screens
-│   │   └── technician/       # Technician-specific screens
-│   └── main.dart             # App entry point
-├── pubspec.yaml              # Dependencies
-└── README.md
-```
-
-## Default Login Credentials
-
-**Manager Account:**
-- Email: ``
-- Password: ``
-
-## Data Storage
-
-The application uses local JSON file storage via the `path_provider` package. All data is stored in:
-- Android: `/data/data/com.example.irritrack_mobile/app_flutter/irritrack_data.json`
-- iOS: `~/Library/Application Support/irritrack_data.json`
-
-## Key Workflows
-
-### Manager Workflow
-1. Login as manager
-2. Create properties with zones
-3. Manage repair items and pricing
-4. Create technician accounts
-5. Assign inspections to technicians
-6. Review completed inspections for billing
-
-### Technician Workflow
-1. Login as technician
-2. View assigned inspections
-3. Start inspection
-4. Walk through zones
-5. Add repairs to each zone
-6. Submit inspection when complete
-
-## Features Comparison: Python CLI vs Flutter Mobile
-
-| Feature | Python CLI | Flutter Mobile |
-|---------|-----------|----------------|
-| Platform | Terminal/Command-line | iOS/Android Mobile |
-| UI | Text-based menus | Modern touch UI |
-| Storage | JSON file | JSON file (local storage) |
-| Authentication | Email/Password | Email/Password |
-| User Roles | Manager/Technician | Manager/Technician |
-| Property Management | ✓ | ✓ |
-| Inspection Workflow | ✓ | ✓ |
-| Zone Management | ✓ | ✓ |
-| Repair Tracking | ✓ | ✓ |
-| Cost Calculation | ✓ | ✓ |
-| Offline Support | ✓ | ✓ |
-
-## Future Enhancements
-
-- Cloud synchronization
-- Photo attachments for repairs
-- GPS location tracking
-- PDF report generation
-- Push notifications
-- Real-time collaboration
-- Analytics dashboard
-- Calendar integration
+## Security
+- Role-based access (Manager vs Technician)
+- Client data (signatures, pricing, contact info) is manager-only
+- Account lockout after failed login attempts
+- Security questions for manager password recovery
 
 ## Development
 
-### Building for Release
+### Prerequisites
+- Flutter SDK 3.0+
+- Android Studio or VS Code with Flutter extension
 
-**Android:**
+### Run Locally
 ```bash
-flutter build apk --release
-```
+# Get dependencies
+flutter pub get
 
-**iOS:**
-```bash
-flutter build ios --release
-```
+# Run on Android emulator
+flutter run
 
-### Running Tests
-```bash
-flutter test
-```
+# Run on Chrome (web)
+flutter run -d chrome
 
-## Technology Stack
+# Build for web release
+flutter build web --release --base-href "/irrigation-automated-flow/"
 
-- **Framework**: Flutter 3.x
-- **Language**: Dart
-- **Storage**: Local JSON files (path_provider)
-- **Architecture**: MVC pattern
-- **State Management**: StatefulWidget
-
-## License
-
-Proprietary - THRIVE Outdoor Solutions
-
-## Support
-
-For issues or questions, contact your system administrator.
-
----
 
 Converted from Python CLI to Flutter Mobile by Claude AI Assistant
