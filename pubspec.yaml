@@ -1,0 +1,33 @@
+name: irritrack_mobile
+description: IrriTrack - Field Service Management for Irrigation Systems
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Local storage
+  path_provider: ^2.1.1
+
+  # For Icons
+  cupertino_icons: ^1.0.2
+
+  # Date formatting
+  intl: ^0.19.0
+
+  # URL launching (for email/SMS links)
+  url_launcher: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  mockito: ^5.4.0
+  build_runner: ^2.4.0
+
+flutter:
+  uses-material-design: true
