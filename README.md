@@ -1,10 +1,10 @@
-# IrriTrack Mobile
+# Irrigation Automated Flow
 
 A Flutter-based mobile application for irrigation field service management. Converted from the original Python CLI application.
 
 ## Overview
 
-IrriTrack Mobile is a comprehensive field service management application designed for THRIVE Outdoor Solutions. It enables managers and technicians to coordinate irrigation system inspections, track repairs, and manage billing.
+Irrigation Automated Flow Mobile is a comprehensive field service management application designed for THRIVE Outdoor Solutions. It enables managers and technicians to coordinate irrigation system inspections, track repairs, and manage billing.
 
 ## Features
 
@@ -76,8 +76,8 @@ irritrack_mobile/
 ## Default Login Credentials
 
 **Manager Account:**
-- Email: `admin@thriveoutdoor.com`
-- Password: `temp1234`
+- Email: ``
+- Password: ``
 
 ## Data Storage
 
