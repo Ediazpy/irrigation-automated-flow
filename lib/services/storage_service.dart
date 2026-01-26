@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/property.dart';
 import '../models/inspection.dart';
@@ -9,8 +9,11 @@ import '../models/quote.dart';
 import '../models/repair_task.dart';
 import '../models/company_settings.dart';
 
+// Conditional import for file operations (not available on web)
+import 'storage_io.dart' if (dart.library.html) 'storage_web.dart' as storage_impl;
+
 class StorageService {
-  static const String _fileName = 'irritrack_data.json';
+  static const String _storageKey = 'irritrack_data';
 
   Map<String, User> users = {};
   Map<int, Property> properties = {};
@@ -97,20 +100,8 @@ class StorageService {
     };
   }
 
-  Future<String> get _localPath async {
-    final directory = await getApplicationDocumentsDirectory();
-    return directory.path;
-  }
-
-  Future<File> get _localFile async {
-    final path = await _localPath;
-    return File('$path/$_fileName');
-  }
-
   Future<void> saveData() async {
     try {
-      final file = await _localFile;
-
       final data = {
         'users': users.map((key, value) => MapEntry(key, value.toJson())),
         'properties': properties.map((key, value) => MapEntry(key.toString(), value.toJson())),
@@ -126,7 +117,16 @@ class StorageService {
         'next_repair_task_id': nextRepairTaskId,
       };
 
-      await file.writeAsString(json.encode(data));
+      final jsonString = json.encode(data);
+
+      if (kIsWeb) {
+        // Use SharedPreferences for web
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_storageKey, jsonString);
+      } else {
+        // Use file system for mobile
+        await storage_impl.saveToFile(jsonString);
+      }
     } catch (e) {
       print('Error saving data: $e');
     }
@@ -134,14 +134,22 @@ class StorageService {
 
   Future<void> loadData() async {
     try {
-      final file = await _localFile;
+      String? contents;
 
-      if (!await file.exists()) {
-        // File doesn't exist yet, use defaults
+      if (kIsWeb) {
+        // Use SharedPreferences for web
+        final prefs = await SharedPreferences.getInstance();
+        contents = prefs.getString(_storageKey);
+      } else {
+        // Use file system for mobile
+        contents = await storage_impl.loadFromFile();
+      }
+
+      if (contents == null || contents.isEmpty) {
+        // No data yet, use defaults
         return;
       }
 
-      final contents = await file.readAsString();
       final data = json.decode(contents) as Map<String, dynamic>;
 
       // Load users
