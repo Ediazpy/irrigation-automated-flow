@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/property.dart';
 import '../../models/zone.dart';
+import '../../models/controller.dart';
 
 class CreatePropertyScreen extends StatefulWidget {
   final AuthService authService;
@@ -106,6 +107,23 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
     }
 
     final storage = widget.authService.storage;
+
+    // Create a single controller with all zones
+    // (users can add more controllers when editing)
+    final numControllers = int.tryParse(_numControllersController.text) ?? 1;
+    final List<Controller> controllers = [];
+
+    // Create controllers based on numControllers
+    for (int i = 0; i < numControllers; i++) {
+      controllers.add(Controller(
+        controllerNumber: i + 1,
+        location: i == 0 ? _controllerLocationController.text : '',
+        zones: i == 0
+            ? zones.map((z) => z.copyWith(controllerNumber: 1)).toList()
+            : [],
+      ));
+    }
+
     final newProperty = Property(
       id: storage.nextPropertyId,
       address: _addressController.text,
@@ -113,9 +131,10 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
       backflowLocation: _backflowLocationController.text,
       backflowSize: _backflowSizeController.text,
       backflowSerial: _backflowSerialController.text,
-      numControllers: int.tryParse(_numControllersController.text) ?? 1,
+      numControllers: numControllers,
       controllerLocation: _controllerLocationController.text,
       zones: zones,
+      controllers: controllers,
       clientName: _clientNameController.text.trim(),
       clientEmail: _clientEmailController.text.trim(),
       clientPhone: _clientPhoneController.text.trim(),

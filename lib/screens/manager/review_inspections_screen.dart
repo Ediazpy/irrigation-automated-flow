@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../models/inspection.dart';
 import '../../models/repair.dart';
@@ -178,9 +177,8 @@ class _ReviewInspectionDetailScreenState
   late List<Repair> zoneRepairs;
   late List<Repair> otherRepairs;
   late String otherNotes;
-  final _clientEmailController = TextEditingController();
-  final _clientPhoneController = TextEditingController();
-  final _clientMessageController = TextEditingController();
+  final _laborCostController = TextEditingController(text: '0.00');
+  final _discountController = TextEditingController(text: '0.00');
 
   @override
   void initState() {
@@ -188,14 +186,24 @@ class _ReviewInspectionDetailScreenState
     zoneRepairs = List.from(widget.inspection.repairs);
     otherRepairs = List.from(widget.inspection.otherRepairs);
     otherNotes = widget.inspection.otherNotes;
+    // Initialize labor and discount from inspection if available
+    _laborCostController.text = widget.inspection.laborCost.toStringAsFixed(2);
+    _discountController.text = widget.inspection.discount.toStringAsFixed(2);
   }
 
   @override
   void dispose() {
-    _clientEmailController.dispose();
-    _clientPhoneController.dispose();
-    _clientMessageController.dispose();
+    _laborCostController.dispose();
+    _discountController.dispose();
     super.dispose();
+  }
+
+  double get _laborCost {
+    return double.tryParse(_laborCostController.text) ?? 0.0;
+  }
+
+  double get _discount {
+    return double.tryParse(_discountController.text) ?? 0.0;
   }
 
   void _saveChanges() {
@@ -207,6 +215,8 @@ class _ReviewInspectionDetailScreenState
       otherRepairs: otherRepairs,
       otherNotes: otherNotes,
       totalCost: totalCost,
+      laborCost: _laborCost,
+      discount: _discount,
     );
     storage.saveData();
 
@@ -218,7 +228,7 @@ class _ReviewInspectionDetailScreenState
     );
   }
 
-  double _calculateTotalCost() {
+  double _calculateMaterialsCost() {
     double total = 0.0;
     for (var repair in zoneRepairs) {
       total += repair.totalCost;
@@ -227,6 +237,10 @@ class _ReviewInspectionDetailScreenState
       total += repair.totalCost;
     }
     return total;
+  }
+
+  double _calculateTotalCost() {
+    return _calculateMaterialsCost() + _laborCost - _discount;
   }
 
   void _deleteZoneRepair(int index) {
@@ -523,94 +537,6 @@ class _ReviewInspectionDetailScreenState
     });
   }
 
-  void _sendQuote() {
-    final storage = widget.authService.storage;
-    final property = storage.properties[widget.inspection.propertyId];
-    final totalCost = _calculateTotalCost();
-
-    // Build quote message
-    final StringBuffer message = StringBuffer();
-
-    // Add custom message first if provided
-    if (_clientMessageController.text.isNotEmpty) {
-      message.writeln(_clientMessageController.text);
-      message.writeln('');
-      message.writeln('---');
-      message.writeln('');
-    }
-
-    message.writeln('IrriTrack Inspection Quote');
-    message.writeln('');
-    message.writeln('Property: ${property?.address ?? "Unknown"}');
-    message.writeln('Date: ${widget.inspection.date}');
-    message.writeln('');
-
-    if (zoneRepairs.isNotEmpty) {
-      message.writeln('Zone Repairs:');
-      for (var repair in zoneRepairs) {
-        message.writeln(
-            '  - ${repair.itemName.replaceAll('_', ' ')} (Zone ${repair.zoneNumber}): \$${repair.totalCost.toStringAsFixed(2)}');
-      }
-      message.writeln('');
-    }
-
-    if (otherRepairs.isNotEmpty) {
-      message.writeln('Other Repairs:');
-      for (var repair in otherRepairs) {
-        message.writeln(
-            '  - ${repair.itemName.replaceAll('_', ' ')}: \$${repair.totalCost.toStringAsFixed(2)}');
-      }
-      message.writeln('');
-    }
-
-    if (otherNotes.isNotEmpty) {
-      message.writeln('Notes:');
-      message.writeln(otherNotes);
-      message.writeln('');
-    }
-
-    message.writeln('Total Cost: \$${totalCost.toStringAsFixed(2)}');
-
-    // Send via email if provided
-    if (_clientEmailController.text.isNotEmpty) {
-      final emailUri = Uri(
-        scheme: 'mailto',
-        path: _clientEmailController.text,
-        query: Uri.encodeQueryComponent('subject=Irrigation Inspection Quote') +
-            '&body=' +
-            Uri.encodeQueryComponent(message.toString()),
-      );
-      launchUrl(emailUri);
-    }
-
-    // Send via SMS if provided
-    if (_clientPhoneController.text.isNotEmpty) {
-      final smsUri = Uri(
-        scheme: 'sms',
-        path: _clientPhoneController.text,
-        query: 'body=' + Uri.encodeQueryComponent(message.toString()),
-      );
-      launchUrl(smsUri);
-    }
-
-    // Mark as completed
-    storage.inspections[widget.inspectionId] = widget.inspection.copyWith(
-      status: 'completed',
-      repairs: zoneRepairs,
-      otherRepairs: otherRepairs,
-      otherNotes: otherNotes,
-      totalCost: totalCost,
-    );
-    storage.saveData();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Quote sent and inspection marked as completed!'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
   void _moveBackToInProgress() {
     showDialog(
       context: context,
@@ -902,69 +828,100 @@ class _ReviewInspectionDetailScreenState
               const SizedBox(height: 16),
             ],
 
-            // Total Cost
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Total Cost',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    '\$${_calculateTotalCost().toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+            // Labor & Discount Section
+            const Text(
+              'Labor & Discount',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _laborCostController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Labor Cost',
+                      prefixIcon: Icon(Icons.engineering),
+                      prefixText: '\$',
                     ),
+                    onChanged: (_) => setState(() {}),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _discountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Discount',
+                      prefixIcon: Icon(Icons.discount),
+                      prefixText: '-\$',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),
 
-            // Client Contact Information
-            const Text(
-              'Send Quote to Client',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _clientEmailController,
-              decoration: const InputDecoration(
-                labelText: 'Client Email',
-                hintText: 'client@example.com',
-                prefixIcon: Icon(Icons.email),
+            // Cost Summary
+            Card(
+              color: Colors.blue.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Materials:'),
+                        Text('\$${_calculateMaterialsCost().toStringAsFixed(2)}'),
+                      ],
+                    ),
+                    if (_laborCost > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Labor:'),
+                          Text('\$${_laborCost.toStringAsFixed(2)}'),
+                        ],
+                      ),
+                    ],
+                    if (_discount > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Discount:', style: TextStyle(color: Colors.green)),
+                          Text('-\$${_discount.toStringAsFixed(2)}',
+                              style: const TextStyle(color: Colors.green)),
+                        ],
+                      ),
+                    ],
+                    const Divider(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '\$${_calculateTotalCost().toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _clientPhoneController,
-              decoration: const InputDecoration(
-                labelText: 'Client Phone',
-                hintText: '(555) 123-4567',
-                prefixIcon: Icon(Icons.phone),
-              ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _clientMessageController,
-              decoration: const InputDecoration(
-                labelText: 'Custom Message to Client (Optional)',
-                hintText: 'Add a personal message...',
-                prefixIcon: Icon(Icons.message),
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 4,
             ),
 
             const SizedBox(height: 24),

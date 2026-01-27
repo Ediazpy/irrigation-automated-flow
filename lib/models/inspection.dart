@@ -11,6 +11,8 @@ class Inspection {
   final String otherNotes;
   final double totalCost;
   final String billingMonth; // Format: "2025-01" for January 2025
+  final double laborCost; // Additional labor charges
+  final double discount; // Discount amount
 
   Inspection({
     required this.id,
@@ -23,6 +25,8 @@ class Inspection {
     this.otherNotes = '',
     required this.totalCost,
     this.billingMonth = '',
+    this.laborCost = 0.0,
+    this.discount = 0.0,
   }) : otherRepairs = otherRepairs ?? [];
 
   // Legacy getter for backwards compatibility
@@ -39,6 +43,8 @@ class Inspection {
       'other_notes': otherNotes,
       'total_cost': totalCost,
       'billing_month': billingMonth,
+      'labor_cost': laborCost,
+      'discount': discount,
     };
   }
 
@@ -77,6 +83,8 @@ class Inspection {
       otherNotes: json['other_notes'] ?? '',
       totalCost: (json['total_cost'] ?? 0.0).toDouble(),
       billingMonth: json['billing_month'] ?? '',
+      laborCost: (json['labor_cost'] ?? 0.0).toDouble(),
+      discount: (json['discount'] ?? 0.0).toDouble(),
     );
   }
 
@@ -97,6 +105,8 @@ class Inspection {
     String? otherNotes,
     double? totalCost,
     String? billingMonth,
+    double? laborCost,
+    double? discount,
   }) {
     return Inspection(
       id: id ?? this.id,
@@ -109,6 +119,8 @@ class Inspection {
       otherNotes: otherNotes ?? this.otherNotes,
       totalCost: totalCost ?? this.totalCost,
       billingMonth: billingMonth ?? this.billingMonth,
+      laborCost: laborCost ?? this.laborCost,
+      discount: discount ?? this.discount,
     );
   }
 }

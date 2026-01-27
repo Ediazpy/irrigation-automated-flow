@@ -25,7 +25,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<AuthService> _initializeApp() async {
-    print('Initializing Irrigation Automated Flow...');
+    print('Initializing IAF App...');
 
     // Initialize storage
     final storage = StorageService();

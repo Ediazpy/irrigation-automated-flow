@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/property.dart';
 import '../../models/zone.dart';
+import '../../models/controller.dart';
 
 class EditPropertyScreen extends StatefulWidget {
   final AuthService authService;
@@ -35,6 +36,8 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
   late TextEditingController _clientPhoneController;
 
   late List<Zone> zones;
+  late List<Controller> controllers;
+  int _selectedControllerIndex = 0;
 
   @override
   void initState() {
@@ -55,7 +58,41 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
     _clientEmailController = TextEditingController(text: widget.property.clientEmail);
     _clientPhoneController = TextEditingController(text: widget.property.clientPhone);
 
-    zones = List.from(widget.property.zones); // Create a copy
+    zones = List.from(widget.property.zones); // Create a copy for backward compatibility
+
+    // Initialize controllers
+    if (widget.property.controllers.isNotEmpty) {
+      controllers = widget.property.controllers.map((c) => Controller(
+        controllerNumber: c.controllerNumber,
+        location: c.location,
+        model: c.model,
+        notes: c.notes,
+        zones: List.from(c.zones),
+      )).toList();
+    } else if (widget.property.numControllers > 1) {
+      // Legacy: multiple controllers but no controller data - create empty controllers
+      controllers = List.generate(
+        widget.property.numControllers,
+        (i) => Controller(
+          controllerNumber: i + 1,
+          location: i == 0 ? widget.property.controllerLocation : '',
+          zones: [],
+        ),
+      );
+      // Put all existing zones in controller 1
+      if (controllers.isNotEmpty && zones.isNotEmpty) {
+        controllers[0] = controllers[0].copyWith(zones: List.from(zones));
+      }
+    } else {
+      // Single controller - create one with all zones
+      controllers = [
+        Controller(
+          controllerNumber: 1,
+          location: widget.property.controllerLocation,
+          zones: List.from(zones),
+        ),
+      ];
+    }
   }
 
   @override
@@ -75,16 +112,187 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
     super.dispose();
   }
 
+  void _addController() {
+    final locationController = TextEditingController();
+    final modelController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Controller ${controllers.length + 1}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: locationController,
+              decoration: const InputDecoration(
+                labelText: 'Location',
+                hintText: 'e.g., Garage, Side of house',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: modelController,
+              decoration: const InputDecoration(
+                labelText: 'Model (optional)',
+                hintText: 'e.g., Hunter Pro-C, Rainbird ESP',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                controllers.add(Controller(
+                  controllerNumber: controllers.length + 1,
+                  location: locationController.text,
+                  model: modelController.text,
+                  zones: [],
+                ));
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editController(int index) {
+    final controller = controllers[index];
+    final locationController = TextEditingController(text: controller.location);
+    final modelController = TextEditingController(text: controller.model);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Controller ${controller.controllerNumber}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: locationController,
+              decoration: const InputDecoration(
+                labelText: 'Location',
+                hintText: 'e.g., Garage, Side of house',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: modelController,
+              decoration: const InputDecoration(
+                labelText: 'Model (optional)',
+                hintText: 'e.g., Hunter Pro-C, Rainbird ESP',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          if (controllers.length > 1 && controller.zones.isEmpty)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteController(index);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                controllers[index] = controller.copyWith(
+                  location: locationController.text,
+                  model: modelController.text,
+                );
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteController(int index) {
+    if (controllers[index].zones.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot delete controller with zones. Remove zones first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Controller'),
+        content: Text('Delete Controller ${controllers[index].controllerNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              setState(() {
+                controllers.removeAt(index);
+                // Renumber controllers
+                for (int i = 0; i < controllers.length; i++) {
+                  controllers[i] = controllers[i].copyWith(controllerNumber: i + 1);
+                  // Update zone controller numbers
+                  final updatedZones = controllers[i].zones.map((z) =>
+                    z.copyWith(controllerNumber: i + 1)
+                  ).toList();
+                  controllers[i] = controllers[i].copyWith(zones: updatedZones);
+                }
+                if (_selectedControllerIndex >= controllers.length) {
+                  _selectedControllerIndex = controllers.length - 1;
+                }
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addZone() {
+    if (controllers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a controller first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final currentController = controllers[_selectedControllerIndex];
+    final descController = TextEditingController();
+    final headTypeController = TextEditingController();
+    final headCountController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) {
-        final descController = TextEditingController();
-        final headTypeController = TextEditingController();
-        final headCountController = TextEditingController();
-
         return AlertDialog(
-          title: Text('Add Zone ${zones.length + 1}'),
+          title: Text('Add Zone to Controller ${currentController.controllerNumber}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -118,12 +326,20 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
               onPressed: () {
                 final headCountText = headCountController.text.trim();
                 setState(() {
-                  zones.add(Zone(
-                    zoneNumber: zones.length + 1,
-                    description: descController.text,
-                    headType: headTypeController.text,
-                    headCount: headCountText.isEmpty ? null : int.tryParse(headCountText),
-                  ));
+                  final newZoneNumber = currentController.zones.length + 1;
+                  final newZones = List<Zone>.from(currentController.zones)
+                    ..add(Zone(
+                      zoneNumber: newZoneNumber,
+                      description: descController.text,
+                      headType: headTypeController.text,
+                      headCount: headCountText.isEmpty ? null : int.tryParse(headCountText),
+                      controllerNumber: currentController.controllerNumber,
+                    ));
+                  controllers[_selectedControllerIndex] = currentController.copyWith(
+                    zones: newZones,
+                  );
+                  // Also update legacy zones list
+                  _updateLegacyZones();
                 });
                 Navigator.pop(context);
               },
@@ -135,8 +351,17 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
     );
   }
 
-  void _editZone(int index) {
-    final zone = zones[index];
+  void _updateLegacyZones() {
+    // Update the legacy zones list with all zones from all controllers
+    zones = [];
+    for (var controller in controllers) {
+      zones.addAll(controller.zones);
+    }
+  }
+
+  void _editZoneInController(int controllerIndex, int zoneIndex) {
+    final controller = controllers[controllerIndex];
+    final zone = controller.zones[zoneIndex];
     final descController = TextEditingController(text: zone.description);
     final headTypeController = TextEditingController(text: zone.headType);
     final headCountController = TextEditingController(
@@ -147,7 +372,7 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Edit Zone ${zone.zoneNumber}'),
+          title: Text('Edit Zone ${zone.zoneNumber} (Controller ${controller.controllerNumber})'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -181,12 +406,16 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
               onPressed: () {
                 final headCountText = headCountController.text.trim();
                 setState(() {
-                  zones[index] = Zone(
+                  final updatedZones = List<Zone>.from(controller.zones);
+                  updatedZones[zoneIndex] = Zone(
                     zoneNumber: zone.zoneNumber,
                     description: descController.text,
                     headType: headTypeController.text,
                     headCount: headCountText.isEmpty ? null : int.tryParse(headCountText),
+                    controllerNumber: controller.controllerNumber,
                   );
+                  controllers[controllerIndex] = controller.copyWith(zones: updatedZones);
+                  _updateLegacyZones();
                 });
                 Navigator.pop(context);
               },
@@ -198,12 +427,15 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
     );
   }
 
-  void _deleteZone(int index) {
+  void _deleteZoneFromController(int controllerIndex, int zoneIndex) {
+    final controller = controllers[controllerIndex];
+    final zone = controller.zones[zoneIndex];
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Zone'),
-        content: Text('Delete Zone ${zones[index].zoneNumber}?'),
+        content: Text('Delete Zone ${zone.zoneNumber} from Controller ${controller.controllerNumber}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -213,11 +445,14 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
               setState(() {
-                zones.removeAt(index);
+                final updatedZones = List<Zone>.from(controller.zones);
+                updatedZones.removeAt(zoneIndex);
                 // Renumber remaining zones
-                for (int i = 0; i < zones.length; i++) {
-                  zones[i] = zones[i].copyWith(zoneNumber: i + 1);
+                for (int i = 0; i < updatedZones.length; i++) {
+                  updatedZones[i] = updatedZones[i].copyWith(zoneNumber: i + 1);
                 }
+                controllers[controllerIndex] = controller.copyWith(zones: updatedZones);
+                _updateLegacyZones();
               });
               Navigator.pop(context);
             },
@@ -240,6 +475,14 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
     if (billingDay < 1) billingDay = 1;
     if (billingDay > 28) billingDay = 28;
 
+    // Update legacy zones from controllers
+    _updateLegacyZones();
+
+    // Get controller location from first controller if available
+    final controllerLocation = controllers.isNotEmpty
+        ? controllers.first.location
+        : _controllerLocationController.text;
+
     final updatedProperty = Property(
       id: widget.property.id, // Keep same ID
       address: _addressController.text,
@@ -247,9 +490,10 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
       backflowLocation: _backflowLocationController.text,
       backflowSize: _backflowSizeController.text,
       backflowSerial: _backflowSerialController.text,
-      numControllers: int.tryParse(_numControllersController.text) ?? 1,
-      controllerLocation: _controllerLocationController.text,
+      numControllers: controllers.length,
+      controllerLocation: controllerLocation,
       zones: zones,
+      controllers: controllers,
       notes: _notesController.text,
       billingCycleDay: billingDay,
       clientName: _clientNameController.text,
@@ -407,85 +651,154 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Controller Info',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _numControllersController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Number of Controllers',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _controllerLocationController,
-              decoration: const InputDecoration(
-                labelText: 'Controller Location',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Zones',
+                  'Controllers & Zones',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _addZone,
+                  onPressed: _addController,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add Zone'),
+                  label: const Text('Add Controller'),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            if (zones.isEmpty)
-              const Center(
+            if (controllers.isEmpty)
+              Card(
                 child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Text(
-                    'No zones added yet',
-                    style: TextStyle(color: Colors.grey),
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.settings_input_component, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'No controllers added yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: _addController,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Controller'),
+                      ),
+                    ],
                   ),
                 ),
               )
             else
-              ...zones.asMap().entries.map((entry) {
-                final index = entry.key;
-                final zone = entry.value;
+              ...controllers.asMap().entries.map((controllerEntry) {
+                final controllerIndex = controllerEntry.key;
+                final controller = controllerEntry.value;
+                final isSelected = controllerIndex == _selectedControllerIndex;
+
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      child: Text('${zone.zoneNumber}'),
-                    ),
-                    title: Text(zone.description),
-                    subtitle: Text(
-                      '${zone.headType}${zone.headCount != null ? " (${zone.headCount})" : ""}',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _editZone(index),
-                          tooltip: 'Edit Zone',
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: isSelected ? 4 : 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: isSelected
+                        ? BorderSide(color: Theme.of(context).primaryColor, width: 2)
+                        : BorderSide.none,
+                  ),
+                  child: Column(
+                    children: [
+                      // Controller Header
+                      ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Theme.of(context).primaryColor,
+                          child: Text(
+                            'C${controller.controllerNumber}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteZone(index),
-                          tooltip: 'Delete Zone',
+                        title: Text(
+                          'Controller ${controller.controllerNumber}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                      ],
-                    ),
+                        subtitle: Text(
+                          controller.location.isEmpty
+                              ? 'No location set'
+                              : '${controller.location}${controller.model.isNotEmpty ? " (${controller.model})" : ""}',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _editController(controllerIndex),
+                              tooltip: 'Edit Controller',
+                            ),
+                            if (isSelected)
+                              IconButton(
+                                icon: const Icon(Icons.add_circle, color: Colors.green),
+                                onPressed: _addZone,
+                                tooltip: 'Add Zone',
+                              ),
+                          ],
+                        ),
+                        onTap: () => setState(() => _selectedControllerIndex = controllerIndex),
+                      ),
+
+                      // Zones for this controller
+                      if (controller.zones.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'No zones - tap + to add',
+                            style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          ),
+                        )
+                      else
+                        ...controller.zones.asMap().entries.map((zoneEntry) {
+                          final zoneIndex = zoneEntry.key;
+                          final zone = zoneEntry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(left: 24, right: 8, bottom: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                radius: 16,
+                                backgroundColor: Colors.blue.shade100,
+                                child: Text(
+                                  '${zone.zoneNumber}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text(zone.description),
+                              subtitle: Text(
+                                '${zone.headType}${zone.headCount != null ? " (${zone.headCount} heads)" : ""}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                                    onPressed: () => _editZoneInController(controllerIndex, zoneIndex),
+                                    tooltip: 'Edit Zone',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                    onPressed: () => _deleteZoneFromController(controllerIndex, zoneIndex),
+                                    tooltip: 'Delete Zone',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      const SizedBox(height: 8),
+                    ],
                   ),
                 );
-              }).toList(),
+              }),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _saveProperty,

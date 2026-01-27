@@ -21,8 +21,9 @@ class _CompletedInspectionsScreenState
   @override
   Widget build(BuildContext context) {
     final storage = widget.authService.storage;
+    // Include both 'completed' and 'quote_sent' statuses for manager view
     final completedInspections = storage.inspections.entries
-        .where((e) => e.value.status == 'completed')
+        .where((e) => e.value.status == 'completed' || e.value.status == 'quote_sent')
         .toList();
 
     // Group by date

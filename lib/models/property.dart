@@ -1,4 +1,5 @@
 import 'zone.dart';
+import 'controller.dart';
 
 class Property {
   final int id;
@@ -8,8 +9,9 @@ class Property {
   final String backflowSize;
   final String backflowSerial;
   final int numControllers;
-  final String controllerLocation;
-  final List<Zone> zones;
+  final String controllerLocation; // Legacy field - kept for backward compatibility
+  final List<Zone> zones; // Legacy field - all zones combined
+  final List<Controller> controllers; // New: separate controllers with their zones
 
   // New fields for workflow improvements
   final String notes; // Gate codes, special instructions, problem areas
@@ -28,12 +30,37 @@ class Property {
     required this.numControllers,
     required this.controllerLocation,
     required this.zones,
+    this.controllers = const [],
     this.notes = '',
     this.billingCycleDay = 1,
     this.clientName = '',
     this.clientEmail = '',
     this.clientPhone = '',
   });
+
+  /// Get all zones from all controllers (combined view)
+  List<Zone> get allZones {
+    if (controllers.isEmpty) {
+      return zones; // Fallback to legacy zones
+    }
+    final allZonesList = <Zone>[];
+    for (var controller in controllers) {
+      allZonesList.addAll(controller.zones);
+    }
+    return allZonesList.isEmpty ? zones : allZonesList;
+  }
+
+  /// Check if property uses multi-controller setup
+  bool get hasMultipleControllers => controllers.length > 1;
+
+  /// Get zones for a specific controller number
+  List<Zone> getZonesForController(int controllerNumber) {
+    final controller = controllers.firstWhere(
+      (c) => c.controllerNumber == controllerNumber,
+      orElse: () => Controller(controllerNumber: controllerNumber, zones: []),
+    );
+    return controller.zones;
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -45,6 +72,7 @@ class Property {
       'num_controllers': numControllers,
       'controller_location': controllerLocation,
       'zones': zones.map((z) => z.toJson()).toList(),
+      'controllers': controllers.map((c) => c.toJson()).toList(),
       'notes': notes,
       'billing_cycle_day': billingCycleDay,
       'client_name': clientName,
@@ -61,6 +89,13 @@ class Property {
           .toList();
     }
 
+    List<Controller> controllersList = [];
+    if (json['controllers'] != null) {
+      controllersList = (json['controllers'] as List)
+          .map((c) => Controller.fromJson(c as Map<String, dynamic>))
+          .toList();
+    }
+
     return Property(
       id: id,
       address: json['address'] ?? '',
@@ -71,6 +106,7 @@ class Property {
       numControllers: json['num_controllers'] ?? 0,
       controllerLocation: json['controller_location'] ?? '',
       zones: zonesList,
+      controllers: controllersList,
       notes: json['notes'] ?? '',
       billingCycleDay: json['billing_cycle_day'] ?? 1,
       clientName: json['client_name'] ?? '',
@@ -89,6 +125,7 @@ class Property {
     int? numControllers,
     String? controllerLocation,
     List<Zone>? zones,
+    List<Controller>? controllers,
     String? notes,
     int? billingCycleDay,
     String? clientName,
@@ -105,6 +142,7 @@ class Property {
       numControllers: numControllers ?? this.numControllers,
       controllerLocation: controllerLocation ?? this.controllerLocation,
       zones: zones ?? this.zones,
+      controllers: controllers ?? this.controllers,
       notes: notes ?? this.notes,
       billingCycleDay: billingCycleDay ?? this.billingCycleDay,
       clientName: clientName ?? this.clientName,

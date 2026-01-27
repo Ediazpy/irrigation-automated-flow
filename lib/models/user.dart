@@ -4,6 +4,8 @@ class User {
   final String role; // 'manager' or 'technician'
   final String name;
   final bool isArchived;
+  // Security questions for password reset (manager only)
+  final Map<String, String> securityAnswers; // questionId -> answer
 
   User({
     required this.email,
@@ -11,7 +13,19 @@ class User {
     required this.role,
     required this.name,
     this.isArchived = false,
+    this.securityAnswers = const {},
   });
+
+  // Available security questions
+  static const List<Map<String, String>> securityQuestions = [
+    {'id': 'pet', 'question': 'What was the name of your first pet?'},
+    {'id': 'city', 'question': 'What city did you grow up in?'},
+    {'id': 'school', 'question': 'What was the name of your elementary school?'},
+    {'id': 'car', 'question': 'What was your first car make and model?'},
+    {'id': 'mother', 'question': "What is your mother's maiden name?"},
+    {'id': 'street', 'question': 'What street did you live on as a child?'},
+    {'id': 'friend', 'question': "What was your childhood best friend's name?"},
+  ];
 
   Map<String, dynamic> toJson() {
     return {
@@ -19,16 +33,25 @@ class User {
       'role': role,
       'name': name,
       'is_archived': isArchived,
+      'security_answers': securityAnswers,
     };
   }
 
   factory User.fromJson(String email, Map<String, dynamic> json) {
+    Map<String, String> answers = {};
+    if (json['security_answers'] != null) {
+      (json['security_answers'] as Map<String, dynamic>).forEach((key, value) {
+        answers[key] = value.toString();
+      });
+    }
+
     return User(
       email: email,
       password: json['password'] ?? '',
       role: json['role'] ?? 'technician',
       name: json['name'] ?? '',
       isArchived: json['is_archived'] ?? false,
+      securityAnswers: answers,
     );
   }
 
@@ -38,6 +61,7 @@ class User {
     String? role,
     String? name,
     bool? isArchived,
+    Map<String, String>? securityAnswers,
   }) {
     return User(
       email: email ?? this.email,
@@ -45,6 +69,11 @@ class User {
       role: role ?? this.role,
       name: name ?? this.name,
       isArchived: isArchived ?? this.isArchived,
+      securityAnswers: securityAnswers ?? this.securityAnswers,
     );
+  }
+
+  bool hasSecurityQuestions() {
+    return securityAnswers.isNotEmpty && securityAnswers.length >= 3;
   }
 }

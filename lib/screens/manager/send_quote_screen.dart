@@ -28,8 +28,6 @@ class SendQuoteScreen extends StatefulWidget {
 class _SendQuoteScreenState extends State<SendQuoteScreen> {
   late Quote _quote;
   late List<QuoteLineItem> _lineItems;
-  final _laborCostController = TextEditingController(text: '0.00');
-  final _discountController = TextEditingController(text: '0.00');
   bool _isLoading = false;
 
   @override
@@ -61,8 +59,6 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
 
   @override
   void dispose() {
-    _laborCostController.dispose();
-    _discountController.dispose();
     super.dispose();
   }
 
@@ -70,13 +66,9 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
     return _lineItems.fold(0.0, (sum, item) => sum + item.totalPrice);
   }
 
-  double get _laborCost {
-    return double.tryParse(_laborCostController.text) ?? 0.0;
-  }
-
-  double get _discount {
-    return double.tryParse(_discountController.text) ?? 0.0;
-  }
+  // Use labor/discount from inspection (set in review screen)
+  double get _laborCost => widget.inspection.laborCost;
+  double get _discount => widget.inspection.discount;
 
   double get _total {
     return _subtotal + _laborCost - _discount;
@@ -541,50 +533,31 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Materials Subtotal:'),
+                      const Text('Materials:'),
                       Text('\$${_subtotal.toStringAsFixed(2)}'),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Additional Labor:')),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: _laborCostController,
-                          keyboardType: TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.right,
-                          decoration: const InputDecoration(
-                            prefixText: '\$',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Discount:')),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: _discountController,
-                          keyboardType: TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.right,
-                          decoration: const InputDecoration(
-                            prefixText: '-\$',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
+                  if (_laborCost > 0) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Labor:'),
+                        Text('\$${_laborCost.toStringAsFixed(2)}'),
+                      ],
+                    ),
+                  ],
+                  if (_discount > 0) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Discount:', style: TextStyle(color: Colors.green)),
+                        Text('-\$${_discount.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.green)),
+                      ],
+                    ),
+                  ],
                   const Divider(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

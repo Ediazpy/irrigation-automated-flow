@@ -65,7 +65,7 @@ class ManagerHomeScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Irrigation Automated Flow',
+                        'IAF - Commercial Irrigation',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey,
                             ),
@@ -109,7 +109,7 @@ class ManagerHomeScreen extends StatelessWidget {
                     ),
                     _MenuCard(
                       icon: Icons.calendar_month,
-                      title: 'Monthly',
+                      title: 'Scheduling',
                       color: Colors.orange,
                       onTap: () {
                         Navigator.of(context).push(

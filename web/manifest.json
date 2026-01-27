@@ -1,6 +1,6 @@
 {
     "name": "Irrigation Automated Flow",
-    "short_name": "IrriFlow",
+    "short_name": "IAF",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#009688",

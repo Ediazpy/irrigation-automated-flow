@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/company_settings.dart';
+import '../../models/user.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   final AuthService authService;
@@ -211,6 +212,18 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
             const SizedBox(height: 32),
 
+            // Security Questions Section
+            _buildSectionHeader('Security Questions', Icons.security),
+            const SizedBox(height: 8),
+            Text(
+              'Set up security questions to allow password reset if locked out.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            _buildSecurityQuestionsCard(),
+
+            const SizedBox(height: 32),
+
             // Save Button
             ElevatedButton.icon(
               onPressed: _saveSettings,
@@ -223,6 +236,172 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecurityQuestionsCard() {
+    final currentUser = widget.authService.currentUser;
+    final hasQuestions = currentUser?.hasSecurityQuestions() ?? false;
+
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          hasQuestions ? Icons.check_circle : Icons.warning,
+          color: hasQuestions ? Colors.green : Colors.orange,
+        ),
+        title: Text(hasQuestions ? 'Security Questions Set' : 'Security Questions Not Set'),
+        subtitle: Text(
+          hasQuestions
+              ? 'You can reset your password using security questions'
+              : 'Set up questions to enable password reset',
+        ),
+        trailing: ElevatedButton(
+          onPressed: _setupSecurityQuestions,
+          child: Text(hasQuestions ? 'Update' : 'Set Up'),
+        ),
+      ),
+    );
+  }
+
+  void _setupSecurityQuestions() {
+    final currentUser = widget.authService.currentUser;
+    if (currentUser == null) return;
+
+    // Controllers for answers
+    final controllers = <String, TextEditingController>{};
+    for (var q in User.securityQuestions) {
+      controllers[q['id']!] = TextEditingController(
+        text: currentUser.securityAnswers[q['id']] ?? '',
+      );
+    }
+
+    // Track selected questions
+    Set<String> selectedQuestions = Set.from(currentUser.securityAnswers.keys);
+    if (selectedQuestions.length < 3) {
+      // Pre-select first 3 if none selected
+      selectedQuestions = User.securityQuestions.take(3).map((q) => q['id']!).toSet();
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Security Questions'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select and answer at least 3 questions:',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  ...User.securityQuestions.map((q) {
+                    final id = q['id']!;
+                    final question = q['question']!;
+                    final isSelected = selectedQuestions.contains(id);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: isSelected,
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    if (value == true) {
+                                      selectedQuestions.add(id);
+                                    } else {
+                                      selectedQuestions.remove(id);
+                                      controllers[id]!.clear();
+                                    }
+                                  });
+                                },
+                              ),
+                              Expanded(
+                                child: Text(
+                                  question,
+                                  style: TextStyle(
+                                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                    color: isSelected ? null : Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isSelected)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 48),
+                              child: TextField(
+                                controller: controllers[id],
+                                decoration: const InputDecoration(
+                                  hintText: 'Your answer',
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                // Validate at least 3 questions answered
+                final answers = <String, String>{};
+                for (var id in selectedQuestions) {
+                  final answer = controllers[id]!.text.trim();
+                  if (answer.isNotEmpty) {
+                    answers[id] = answer;
+                  }
+                }
+
+                if (answers.length < 3) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please answer at least 3 questions'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                // Save answers
+                final storage = widget.authService.storage;
+                storage.users[currentUser.email] = currentUser.copyWith(
+                  securityAnswers: answers,
+                );
+                storage.saveData();
+
+                Navigator.pop(context);
+                setState(() {}); // Refresh the card
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Security questions saved'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),

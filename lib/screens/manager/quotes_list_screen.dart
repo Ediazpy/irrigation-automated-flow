@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../services/quote_service.dart';
 import '../../models/quote.dart';
+import '../../models/property.dart';
 import '../../constants/status_constants.dart';
 import 'schedule_repair_screen.dart';
 
@@ -287,6 +289,22 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                   ),
                 ),
               ],
+
+              // Resend Button for Sent/Expired Quotes
+              if (quote.status == QuoteStatus.sent || quote.status == QuoteStatus.expired) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _resendQuote(quote),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(quote.status == QuoteStatus.expired ? 'Extend & Resend' : 'Resend Quote'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -459,6 +477,24 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                       ),
                     ),
                   ],
+
+                  // Resend Button for Sent/Expired quotes
+                  if (quote.status == QuoteStatus.sent || quote.status == QuoteStatus.expired) ...[
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _resendQuote(quote);
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Resend Quote'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(16),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -519,5 +555,195 @@ class _QuotesListScreenState extends State<QuotesListScreen>
         ),
       ),
     ).then((_) => setState(() {}));
+  }
+
+  void _resendQuote(Quote quote) {
+    final property = widget.authService.storage.properties[quote.propertyId];
+    if (property == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Property not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if quote is expired and offer to extend
+    if (quote.status == QuoteStatus.expired) {
+      _showExtendAndResendDialog(quote, property);
+    } else {
+      _showResendOptions(quote, property);
+    }
+  }
+
+  void _showExtendAndResendDialog(Quote quote, Property property) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Quote Expired'),
+        content: const Text(
+          'This quote has expired. Would you like to extend the expiration and resend it to the customer?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _extendAndResend(quote, property);
+            },
+            child: const Text('Extend & Resend'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _extendAndResend(Quote quote, Property property) {
+    final storage = widget.authService.storage;
+    final settings = storage.companySettings;
+    final expirationDays = settings?.quoteExpirationDays ?? 30;
+
+    // Update quote with new expiration date and mark as sent
+    final updatedQuote = quote.copyWith(
+      status: QuoteStatus.sent,
+      sentAt: DateTime.now().toIso8601String(),
+      expiresAt: DateTime.now().add(Duration(days: expirationDays)).toIso8601String(),
+    );
+
+    storage.quotes[quote.id] = updatedQuote;
+    storage.saveData();
+
+    setState(() {});
+    _showResendOptions(updatedQuote, property);
+  }
+
+  void _showResendOptions(Quote quote, Property property) {
+    // Generate quote URL and messages
+    final quoteUrl = QuoteService.generateQuoteUrl(quote.accessToken);
+    final emailMessage = QuoteService.formatQuoteMessage(
+      quote: quote,
+      property: property,
+      quoteUrl: quoteUrl,
+    );
+    final smsMessage = QuoteService.formatSmsMessage(
+      quote: quote,
+      property: property,
+      quoteUrl: quoteUrl,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Resend Quote',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Quote #${quote.id} - \$${quote.totalCost.toStringAsFixed(2)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+              if (property.clientEmail.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await _sendViaEmail(quote, property, emailMessage);
+                  },
+                  icon: const Icon(Icons.email),
+                  label: Text('Send via Email\n${property.clientEmail}',
+                      textAlign: TextAlign.center),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                ),
+              if (property.clientEmail.isNotEmpty && property.clientPhone.isNotEmpty)
+                const SizedBox(height: 12),
+              if (property.clientPhone.isNotEmpty)
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await _sendViaSms(property, smsMessage);
+                  },
+                  icon: const Icon(Icons.sms),
+                  label: Text('Send via SMS\n${property.clientPhone}',
+                      textAlign: TextAlign.center),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+                label: const Text('Cancel'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendViaEmail(Quote quote, Property property, String message) async {
+    final email = property.clientEmail;
+    final subject = Uri.encodeComponent('Quote #${quote.id} from ${quote.companyName}');
+    final body = Uri.encodeComponent(message);
+    final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email app opened'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open email app'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _sendViaSms(Property property, String message) async {
+    final phone = property.clientPhone.replaceAll(RegExp(r'[^\d]'), '');
+    final body = Uri.encodeComponent(message);
+    final uri = Uri.parse('sms:$phone?body=$body');
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SMS app opened'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open SMS app'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

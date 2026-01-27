@@ -275,12 +275,21 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   const SizedBox(width: 16),
-                  Icon(Icons.timer, size: 16, color: Colors.grey.shade400),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${task.estimatedHours}h estimated',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
+                  if (task.status == RepairTaskStatus.completed && task.completedAt != null) ...[
+                    Icon(Icons.check_circle, size: 16, color: Colors.green.shade400),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Completed ${_formatCompletedDate(task.completedAt!)}',
+                      style: TextStyle(color: Colors.green.shade600, fontSize: 12),
+                    ),
+                  ] else ...[
+                    Icon(Icons.timer, size: 16, color: Colors.grey.shade400),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${task.estimatedHours}h estimated',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -350,6 +359,8 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
                 children: [
                   _detailRow('Property', property?.address ?? 'Unknown'),
                   _detailRow('Scheduled', task.scheduledDate),
+                  if (task.status == RepairTaskStatus.completed && task.completedAt != null)
+                    _detailRow('Completed', _formatCompletedDate(task.completedAt!)),
                   _detailRow('Priority', task.priority.toUpperCase()),
                   _detailRow('Est. Hours', '${task.estimatedHours}h'),
                   if (quote != null)
@@ -480,5 +491,14 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
         ],
       ),
     );
+  }
+
+  String _formatCompletedDate(String isoDate) {
+    try {
+      final date = DateTime.parse(isoDate);
+      return '${date.month}/${date.day}/${date.year}';
+    } catch (e) {
+      return isoDate;
+    }
   }
 }
