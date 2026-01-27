@@ -63,21 +63,39 @@ class ManagerHomeScreen extends StatelessWidget {
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            'Welcome, ${authService.currentUser?.name ?? "Manager"}!',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                          Image.asset(
+                            'assets/images/iaf_logo.png',
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => Icon(
+                              Icons.water_drop,
+                              size: 40,
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'IAF - Commercial Irrigation',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Welcome, ${authService.currentUser?.name ?? "Manager"}!',
+                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                 ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'IAF - Commercial Irrigation',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Colors.grey,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),

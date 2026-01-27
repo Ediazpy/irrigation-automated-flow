@@ -334,6 +334,57 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildLogo(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Responsive logo size: smaller on mobile, larger on tablet/desktop
+    final logoSize = screenWidth > 600 ? 180.0 : (screenWidth > 400 ? 140.0 : 110.0);
+
+    return Image.asset(
+      'assets/images/iaf_logo.png',
+      width: logoSize,
+      height: logoSize,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        // Fallback if logo image not found
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.water_drop,
+                size: logoSize * 0.4,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'IAF',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 8,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Irrigation Automated Flow',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 1,
+                    color: Colors.grey.shade600,
+                  ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -349,38 +400,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo or App Name
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.water_drop,
-                      size: 60,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'IAF',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Irrigation Automated Flow',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w300,
-                          letterSpacing: 1,
-                          color: Colors.grey.shade600,
-                        ),
-                  ),
+                  // Logo
+                  _buildLogo(context),
                   const SizedBox(height: 8),
                   Text(
                     'Commercial Irrigation Management',
