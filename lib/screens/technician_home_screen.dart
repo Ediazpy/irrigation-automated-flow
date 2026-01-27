@@ -36,11 +36,14 @@ class TechnicianHomeScreen extends StatelessWidget {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               // Welcome message
               Card(
                 child: Padding(
@@ -145,6 +148,8 @@ class TechnicianHomeScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        ),
         ),
       ),
     );

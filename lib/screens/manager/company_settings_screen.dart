@@ -93,11 +93,14 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
             // Company Information Section
             _buildSectionHeader('Company Information', Icons.business),
             const SizedBox(height: 12),
@@ -238,6 +241,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             const SizedBox(height: 16),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
