@@ -101,6 +101,62 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
     );
   }
 
+  void _editZone(int index) {
+    final zone = zones[index];
+    showDialog(
+      context: context,
+      builder: (context) {
+        final descController = TextEditingController(text: zone.description);
+        final headTypeController = TextEditingController(text: zone.headType);
+        final headCountController = TextEditingController(text: zone.headCount.toString());
+
+        return AlertDialog(
+          title: Text('Edit Zone ${zone.zoneNumber}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: descController,
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              TextField(
+                controller: headTypeController,
+                decoration: const InputDecoration(
+                  labelText: 'Head Type',
+                  hintText: 'spray, rotor, drip, etc.',
+                ),
+              ),
+              TextField(
+                controller: headCountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Head Count'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  zones[index] = zone.copyWith(
+                    description: descController.text,
+                    headType: headTypeController.text,
+                    headCount: int.tryParse(headCountController.text) ?? 0,
+                  );
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _saveProperty() {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -235,24 +291,36 @@ class _CreatePropertyScreenState extends State<CreatePropertyScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            ...zones.map((zone) => Card(
-                  child: ListTile(
-                    title: Text('Zone ${zone.zoneNumber}: ${zone.description}'),
-                    subtitle: Text('${zone.headType} (${zone.headCount})'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () {
-                        setState(() {
-                          zones.remove(zone);
-                          // Renumber zones
-                          for (int i = 0; i < zones.length; i++) {
-                            zones[i] = zones[i].copyWith(zoneNumber: i + 1);
-                          }
-                        });
-                      },
-                    ),
+            ...zones.asMap().entries.map((entry) {
+              final index = entry.key;
+              final zone = entry.value;
+              return Card(
+                child: ListTile(
+                  title: Text('Zone ${zone.zoneNumber}: ${zone.description}'),
+                  subtitle: Text('${zone.headType} (${zone.headCount})'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _editZone(index),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () {
+                          setState(() {
+                            zones.removeAt(index);
+                            for (int i = 0; i < zones.length; i++) {
+                              zones[i] = zones[i].copyWith(zoneNumber: i + 1);
+                            }
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                )),
+                ),
+              );
+            }),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _saveProperty,

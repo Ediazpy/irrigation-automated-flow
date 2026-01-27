@@ -1,8 +1,10 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'storage_service.dart';
 
 class AuthService {
   final StorageService _storage;
+  static const String _sessionKey = 'irritrack_logged_in_email';
 
   AuthService(this._storage);
 
@@ -64,6 +66,7 @@ class AuthService {
     // Login successful
     resetFailedAttempts(email);
     currentUser = user;
+    await _saveSession(email);
     return LoginResult(
       success: true,
       message: 'Welcome, ${user.name}!',
@@ -71,8 +74,29 @@ class AuthService {
     );
   }
 
-  void logout() {
+  Future<void> logout() async {
     currentUser = null;
+    await _clearSession();
+  }
+
+  Future<void> _saveSession(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionKey, email);
+  }
+
+  Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionKey);
+  }
+
+  Future<bool> restoreSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString(_sessionKey);
+    if (email != null && _storage.users.containsKey(email)) {
+      currentUser = _storage.users[email];
+      return true;
+    }
+    return false;
   }
 
   bool get isLoggedIn => currentUser != null;

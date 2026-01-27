@@ -13,7 +13,7 @@ class TechnicianHomeScreen extends StatelessWidget {
   const TechnicianHomeScreen({Key? key, required this.authService}) : super(key: key);
 
   void _logout(BuildContext context) {
-    authService.logout();
+    authService.logout(); // fire-and-forget async
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (context) => LoginScreen(authService: authService),
@@ -48,39 +48,21 @@ class TechnicianHomeScreen extends StatelessWidget {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Image.asset(
-                        'assets/images/iaf_logo.png',
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => Icon(
-                          Icons.water_drop,
-                          size: 40,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                      Text(
+                        'Welcome, ${authService.currentUser?.name ?? "Technician"}!',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Welcome, ${authService.currentUser?.name ?? "Technician"}!',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Field Service Technician',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Field Service Technician',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.grey,
-                                  ),
-                            ),
-                          ],
-                        ),
                       ),
                     ],
                   ),

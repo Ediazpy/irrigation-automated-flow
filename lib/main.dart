@@ -3,6 +3,8 @@ import 'services/storage_service.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/setup_screen.dart';
+import 'screens/manager_home_screen.dart';
+import 'screens/technician_home_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -40,7 +42,10 @@ class _MyAppState extends State<MyApp> {
 
     // Initialize auth service
     final authService = AuthService(storage);
-    print('Auth service initialized');
+
+    // Try to restore previous session
+    await authService.restoreSession();
+    print('Auth service initialized (session restored: ${authService.isLoggedIn})');
 
     return authService;
   }
@@ -118,7 +123,11 @@ class IrriTrackApp extends StatelessWidget {
       ),
       home: authService.storage.users.isEmpty
           ? SetupScreen(authService: authService)
-          : LoginScreen(authService: authService),
+          : authService.isLoggedIn
+              ? (authService.isManager
+                  ? ManagerHomeScreen(authService: authService)
+                  : TechnicianHomeScreen(authService: authService))
+              : LoginScreen(authService: authService),
     );
   }
 }
