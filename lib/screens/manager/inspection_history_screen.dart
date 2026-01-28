@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
 import '../../models/inspection.dart';
 import '../../utils/date_formatter.dart';
+import '../../widgets/photo_image.dart';
 
 class InspectionHistoryScreen extends StatelessWidget {
   final AuthService authService;
@@ -254,8 +255,8 @@ class InspectionHistoryScreen extends StatelessWidget {
                                             ),
                                           ),
                                           InteractiveViewer(
-                                            child: Image.memory(
-                                              base64Decode(inspection.photos[i]),
+                                            child: PhotoImage(
+                                              photoData: inspection.photos[i],
                                               fit: BoxFit.contain,
                                             ),
                                           ),
@@ -269,8 +270,8 @@ class InspectionHistoryScreen extends StatelessWidget {
                                   margin: const EdgeInsets.only(right: 8),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.memory(
-                                      base64Decode(inspection.photos[i]),
+                                    child: PhotoImage(
+                                      photoData: inspection.photos[i],
                                       fit: BoxFit.cover,
                                     ),
                                   ),

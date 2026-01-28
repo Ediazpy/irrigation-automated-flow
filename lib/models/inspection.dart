@@ -13,7 +13,7 @@ class Inspection {
   final String billingMonth; // Format: "2025-01" for January 2025
   final double laborCost; // Additional labor charges
   final double discount; // Discount amount
-  final List<String> photos; // Base64 encoded repair photos
+  final Map<int, List<String>> zonePhotos; // Zone number -> list of base64 photos (0 = general)
 
   Inspection({
     required this.id,
@@ -28,9 +28,28 @@ class Inspection {
     this.billingMonth = '',
     this.laborCost = 0.0,
     this.discount = 0.0,
-    List<String>? photos,
+    Map<int, List<String>>? zonePhotos,
   })  : otherRepairs = otherRepairs ?? [],
-        photos = photos ?? [];
+        zonePhotos = zonePhotos ?? {};
+
+  // Legacy getter for backwards compatibility with old photos field
+  List<String> get photos {
+    final all = <String>[];
+    for (var photoList in zonePhotos.values) {
+      all.addAll(photoList);
+    }
+    return all;
+  }
+
+  // Get photos for a specific zone
+  List<String> getZonePhotos(int zoneNumber) {
+    return zonePhotos[zoneNumber] ?? [];
+  }
+
+  // Get total photo count
+  int get totalPhotoCount {
+    return zonePhotos.values.fold(0, (sum, list) => sum + list.length);
+  }
 
   // Legacy getter for backwards compatibility
   String get technician => technicians.isNotEmpty ? technicians.first : '';
@@ -48,7 +67,7 @@ class Inspection {
       'billing_month': billingMonth,
       'labor_cost': laborCost,
       'discount': discount,
-      'photos': photos,
+      'zone_photos': zonePhotos.map((key, value) => MapEntry(key.toString(), value)),
     };
   }
 
@@ -89,8 +108,25 @@ class Inspection {
       billingMonth: json['billing_month'] ?? '',
       laborCost: (json['labor_cost'] ?? 0.0).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
-      photos: json['photos'] != null ? List<String>.from(json['photos']) : [],
+      zonePhotos: _parseZonePhotos(json),
     );
+  }
+
+  static Map<int, List<String>> _parseZonePhotos(Map<String, dynamic> json) {
+    final result = <int, List<String>>{};
+
+    // Handle new zone_photos format
+    if (json['zone_photos'] != null) {
+      (json['zone_photos'] as Map<String, dynamic>).forEach((key, value) {
+        result[int.parse(key)] = List<String>.from(value);
+      });
+    }
+    // Backwards compatibility: migrate old photos list to zone 0
+    else if (json['photos'] != null && (json['photos'] as List).isNotEmpty) {
+      result[0] = List<String>.from(json['photos']);
+    }
+
+    return result;
   }
 
   double calculateTotalCost() {
@@ -112,7 +148,7 @@ class Inspection {
     String? billingMonth,
     double? laborCost,
     double? discount,
-    List<String>? photos,
+    Map<int, List<String>>? zonePhotos,
   }) {
     return Inspection(
       id: id ?? this.id,
@@ -127,7 +163,30 @@ class Inspection {
       billingMonth: billingMonth ?? this.billingMonth,
       laborCost: laborCost ?? this.laborCost,
       discount: discount ?? this.discount,
-      photos: photos ?? this.photos,
+      zonePhotos: zonePhotos ?? this.zonePhotos,
     );
+  }
+
+  /// Add a photo to a specific zone
+  Inspection addPhotoToZone(int zoneNumber, String base64Photo) {
+    final updatedPhotos = Map<int, List<String>>.from(zonePhotos);
+    if (!updatedPhotos.containsKey(zoneNumber)) {
+      updatedPhotos[zoneNumber] = [];
+    }
+    updatedPhotos[zoneNumber] = [...updatedPhotos[zoneNumber]!, base64Photo];
+    return copyWith(zonePhotos: updatedPhotos);
+  }
+
+  /// Remove a photo from a specific zone
+  Inspection removePhotoFromZone(int zoneNumber, int photoIndex) {
+    final updatedPhotos = Map<int, List<String>>.from(zonePhotos);
+    if (updatedPhotos.containsKey(zoneNumber)) {
+      final photos = List<String>.from(updatedPhotos[zoneNumber]!);
+      if (photoIndex >= 0 && photoIndex < photos.length) {
+        photos.removeAt(photoIndex);
+        updatedPhotos[zoneNumber] = photos;
+      }
+    }
+    return copyWith(zonePhotos: updatedPhotos);
   }
 }

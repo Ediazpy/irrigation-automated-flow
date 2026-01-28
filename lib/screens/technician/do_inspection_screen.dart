@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
+import '../../services/photo_storage_service.dart';
+import '../../widgets/photo_image.dart';
 import '../../models/repair.dart';
 
 class DoInspectionScreen extends StatefulWidget {
@@ -55,6 +57,7 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
                   Text('Date: ${inspection.date}'),
                   Text('Status: ${inspection.status}'),
                   Text('Repairs logged: ${inspection.repairs.length + inspection.otherRepairs.length}'),
+                  Text('Photos: ${inspection.totalPhotoCount}'),
                 ],
               ),
             ),
@@ -69,7 +72,7 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
                   child: ListTile(
                     leading: const Icon(Icons.route, color: Colors.blue),
                     title: const Text('Walk Zones'),
-                    subtitle: const Text('Add repairs to zones'),
+                    subtitle: const Text('Add repairs & photos to zones'),
                     trailing: const Icon(Icons.arrow_forward),
                     onTap: () => _walkZones(inspection, property),
                   ),
@@ -92,16 +95,6 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
                     subtitle: const Text('View repairs from last inspection'),
                     trailing: const Icon(Icons.arrow_forward),
                     onTap: () => _viewPreviousRepairs(inspection.propertyId),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.camera_alt, color: Colors.teal),
-                    title: const Text('Repair Photos'),
-                    subtitle: Text('${inspection.photos.length} photo(s) taken'),
-                    trailing: const Icon(Icons.arrow_forward),
-                    onTap: () => _managePhotos(inspection),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -318,24 +311,12 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
     );
   }
 
-  void _managePhotos(inspection) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _InspectionPhotosScreen(
-          authService: widget.authService,
-          inspectionId: widget.inspectionId,
-        ),
-      ),
-    ).then((_) => setState(() {}));
-  }
-
   void _submitInspection(inspection) {
     final storage = widget.authService.storage;
     final photosRequired = storage.companySettings?.photosRequired ?? false;
 
     // Check if photos are required and none taken
-    if (photosRequired && inspection.photos.isEmpty) {
+    if (photosRequired && inspection.totalPhotoCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Photos are required before submitting. Please take at least one photo.'),
@@ -354,7 +335,7 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
         content: Text(
           'This will complete and lock the inspection.\n\n'
           'Repairs: $totalRepairs\n'
-          'Photos: ${inspection.photos.length}\n\n'
+          'Photos: ${inspection.totalPhotoCount}\n\n'
           'Are you sure?',
         ),
         actions: [
@@ -390,263 +371,6 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
   }
 }
 
-// Photo management screen for inspection
-class _InspectionPhotosScreen extends StatefulWidget {
-  final AuthService authService;
-  final int inspectionId;
-
-  const _InspectionPhotosScreen({
-    Key? key,
-    required this.authService,
-    required this.inspectionId,
-  }) : super(key: key);
-
-  @override
-  State<_InspectionPhotosScreen> createState() => _InspectionPhotosScreenState();
-}
-
-class _InspectionPhotosScreenState extends State<_InspectionPhotosScreen> {
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> _takePhoto() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.camera,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 70,
-    );
-    if (image != null) {
-      await _savePhoto(image);
-    }
-  }
-
-  Future<void> _pickFromGallery() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 70,
-    );
-    if (image != null) {
-      await _savePhoto(image);
-    }
-  }
-
-  Future<void> _savePhoto(XFile image) async {
-    final bytes = await image.readAsBytes();
-    final base64Str = base64Encode(bytes);
-
-    final storage = widget.authService.storage;
-    final inspection = storage.inspections[widget.inspectionId]!;
-    final updatedPhotos = List<String>.from(inspection.photos)..add(base64Str);
-
-    storage.inspections[widget.inspectionId] = inspection.copyWith(photos: updatedPhotos);
-    storage.saveData();
-
-    setState(() {});
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Photo saved'), backgroundColor: Colors.green),
-      );
-    }
-  }
-
-  void _deletePhoto(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Photo'),
-        content: const Text('Are you sure you want to delete this photo?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              final storage = widget.authService.storage;
-              final inspection = storage.inspections[widget.inspectionId]!;
-              final updatedPhotos = List<String>.from(inspection.photos)..removeAt(index);
-              storage.inspections[widget.inspectionId] = inspection.copyWith(photos: updatedPhotos);
-              storage.saveData();
-              setState(() {});
-              Navigator.pop(context);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _viewPhoto(String base64Str) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppBar(
-              title: const Text('Photo'),
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            InteractiveViewer(
-              child: Image.memory(
-                base64Decode(base64Str),
-                fit: BoxFit.contain,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final storage = widget.authService.storage;
-    final inspection = storage.inspections[widget.inspectionId]!;
-    final photosRequired = storage.companySettings?.photosRequired ?? false;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Repair Photos'),
-        actions: [
-          if (photosRequired)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(
-                child: Chip(
-                  label: Text('Required', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  backgroundColor: Colors.red,
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (photosRequired && inspection.photos.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              color: Colors.red.shade50,
-              child: const Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.red),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'At least one photo is required before submitting this inspection.',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: inspection.photos.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.no_photography, size: 64, color: Colors.grey.shade400),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No photos taken yet',
-                          style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(8),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: inspection.photos.length,
-                    itemBuilder: (context, index) {
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          GestureDetector(
-                            onTap: () => _viewPhoto(inspection.photos[index]),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.memory(
-                                base64Decode(inspection.photos[index]),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 4,
-                            right: 4,
-                            child: GestureDetector(
-                              onTap: () => _deletePhoto(index),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 16),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _takePhoto,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Take Photo'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickFromGallery,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Gallery'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.all(14),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // Define categories that are "other repairs" (not zone-specific)
 const List<String> otherRepairCategories = [
   'backflow',
@@ -669,7 +393,7 @@ const List<String> zoneRepairCategories = [
   'valves',
 ];
 
-// Walk Zones Screen
+// Walk Zones Screen with auto-save and zone photos
 class WalkZonesScreen extends StatefulWidget {
   final AuthService authService;
   final int inspectionId;
@@ -685,187 +409,518 @@ class WalkZonesScreen extends StatefulWidget {
 }
 
 class _WalkZonesScreenState extends State<WalkZonesScreen> {
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _takeZonePhoto(int zoneNumber) async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 512,  // Smaller photos
+      maxHeight: 512,
+      imageQuality: 50,  // Lower quality = smaller file
+    );
+    if (image != null) {
+      await _saveZonePhoto(zoneNumber, image);
+    }
+  }
+
+  Future<void> _pickZonePhotoFromGallery(int zoneNumber) async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 50,
+    );
+    if (image != null) {
+      await _saveZonePhoto(zoneNumber, image);
+    }
+  }
+
+  Future<void> _saveZonePhoto(int zoneNumber, XFile image) async {
+    final bytes = await image.readAsBytes();
+
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId]!;
+
+    // Upload to Firebase Storage and store the download URL
+    String photoRef;
+    try {
+      photoRef = await PhotoStorageService.uploadInspectionPhoto(
+        inspectionId: widget.inspectionId,
+        zoneNumber: zoneNumber,
+        photoBytes: bytes,
+      );
+    } catch (e) {
+      // Fallback to base64 if upload fails (e.g., no internet)
+      print('Firebase Storage upload failed, using base64 fallback: $e');
+      photoRef = base64Encode(bytes);
+    }
+
+    storage.inspections[widget.inspectionId] = inspection.addPhotoToZone(zoneNumber, photoRef);
+    storage.saveData();
+
+    setState(() {});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Photo saved for Zone $zoneNumber'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  void _viewZonePhotos(int zoneNumber) {
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId]!;
+    final photos = inspection.getZonePhotos(zoneNumber);
+    final photosRequired = storage.companySettings?.photosRequired ?? false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Re-read photos in case they changed
+          final currentInspection = storage.inspections[widget.inspectionId]!;
+          final currentPhotos = currentInspection.getZonePhotos(zoneNumber);
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Text('Zone $zoneNumber Photos'),
+                const Spacer(),
+                if (photosRequired)
+                  const Chip(
+                    label: Text('Required', style: TextStyle(fontSize: 10)),
+                    backgroundColor: Colors.red,
+                    labelStyle: TextStyle(color: Colors.white),
+                    padding: EdgeInsets.zero,
+                  ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: currentPhotos.isEmpty
+                  ? const Center(child: Text('No photos for this zone'))
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemCount: currentPhotos.length,
+                      itemBuilder: (context, index) {
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            GestureDetector(
+                              onTap: () => _viewFullPhoto(currentPhotos[index]),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: PhotoImage(
+                                  photoData: currentPhotos[index],
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _deleteZonePhoto(zoneNumber, index);
+                                  setDialogState(() {});
+                                  setState(() {});
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _takeZonePhoto(zoneNumber);
+                },
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Camera'),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _pickZonePhotoFromGallery(zoneNumber);
+                },
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Gallery'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _viewFullPhoto(String photoData) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: const Text('Photo'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            InteractiveViewer(
+              child: PhotoImage(
+                photoData: photoData,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _deleteZonePhoto(int zoneNumber, int photoIndex) {
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId]!;
+
+    // Delete from Firebase Storage if it's a URL
+    final photos = inspection.getZonePhotos(zoneNumber);
+    if (photoIndex < photos.length && PhotoStorageService.isStorageUrl(photos[photoIndex])) {
+      PhotoStorageService.deletePhoto(photos[photoIndex]);
+    }
+
+    storage.inspections[widget.inspectionId] = inspection.removePhotoFromZone(zoneNumber, photoIndex);
+    storage.saveData();
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = widget.authService.storage;
     final inspection = storage.inspections[widget.inspectionId]!;
     final property = storage.properties[inspection.propertyId]!;
+    final photosRequired = storage.companySettings?.photosRequired ?? false;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Walk Zones')),
-      body: ListView(
-        children: [
-          // Zone Repairs Section
-          if (property.zones.isNotEmpty) ...[
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          storage.saveData(); // Auto-save on back
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Walk Zones'),
+          actions: [
+            if (photosRequired)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Center(
+                  child: Chip(
+                    label: Text('Photos Required', style: TextStyle(fontSize: 11, color: Colors.white)),
+                    backgroundColor: Colors.red,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        body: ListView(
+          children: [
+            // Zone Repairs Section
+            if (property.zones.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Zone Repairs',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ...property.zones.map((zone) {
+                final zoneRepairs = inspection.repairs
+                    .where((r) => r.zoneNumber == zone.zoneNumber)
+                    .toList();
+                final zonePhotos = inspection.getZonePhotos(zone.zoneNumber);
+                final needsPhotos = photosRequired && zoneRepairs.isNotEmpty && zonePhotos.isEmpty;
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: ExpansionTile(
+                    leading: Stack(
+                      children: [
+                        CircleAvatar(child: Text('${zone.zoneNumber}')),
+                        if (needsPhotos)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.warning, size: 8, color: Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
+                    title: Row(
+                      children: [
+                        Text('Zone ${zone.zoneNumber}'),
+                        if (zonePhotos.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Icon(Icons.camera_alt, size: 16, color: Colors.grey.shade600),
+                          Text(' ${zonePhotos.length}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(zone.description),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Head Type: ${zone.headType}'),
+                            if (zone.headCount != null)
+                              Text('Head Count: ${zone.headCount}'),
+                            const Divider(),
+
+                            // Photos section for this zone
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.camera_alt, size: 18),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Photos (${zonePhotos.length})',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    if (needsPhotos)
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 8),
+                                        child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11)),
+                                      ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.camera_alt, color: Colors.teal),
+                                      onPressed: () => _takeZonePhoto(zone.zoneNumber),
+                                      tooltip: 'Take Photo',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.photo_library, color: Colors.teal),
+                                      onPressed: () => _pickZonePhotoFromGallery(zone.zoneNumber),
+                                      tooltip: 'Pick from Gallery',
+                                    ),
+                                    if (zonePhotos.isNotEmpty)
+                                      IconButton(
+                                        icon: const Icon(Icons.visibility, color: Colors.blue),
+                                        onPressed: () => _viewZonePhotos(zone.zoneNumber),
+                                        tooltip: 'View Photos',
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+
+                            // Photo thumbnails
+                            if (zonePhotos.isNotEmpty)
+                              SizedBox(
+                                height: 60,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: zonePhotos.length,
+                                  itemBuilder: (context, index) {
+                                    return GestureDetector(
+                                      onTap: () => _viewFullPhoto(zonePhotos[index]),
+                                      child: Container(
+                                        width: 60,
+                                        height: 60,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(8),
+                                          image: DecorationImage(
+                                            image: photoImageProvider(zonePhotos[index]),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+
+                            const Divider(),
+                            const Text(
+                              'Repairs in this zone:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            if (zoneRepairs.isEmpty)
+                              const Text('No repairs logged'),
+                            ...zoneRepairs.asMap().entries.map((entry) {
+                              final repair = entry.value;
+                              return ListTile(
+                                dense: true,
+                                title: Text(repair.itemName.replaceAll('_', ' ')),
+                                subtitle: repair.notes.isNotEmpty
+                                    ? Text(repair.notes)
+                                    : null,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('x${repair.quantity}'),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                      onPressed: () => _deleteRepair(repair, true),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _addRepair(zone.zoneNumber),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Repair'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ],
+
+            // Other Repairs Section
             const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
               child: Text(
-                'Zone Repairs',
+                'Other Repairs',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            ...property.zones.map((zone) {
-              final zoneRepairs = inspection.repairs
-                  .where((r) => r.zoneNumber == zone.zoneNumber)
-                  .toList();
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ExpansionTile(
-                  leading: CircleAvatar(child: Text('${zone.zoneNumber}')),
-                  title: Text('Zone ${zone.zoneNumber}'),
-                  subtitle: Text(zone.description),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Backflow, Controller, Mainline, Winterize, Wire, etc.',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
+            Card(
+              margin: const EdgeInsets.all(8),
+              color: Colors.orange.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Head Type: ${zone.headType}'),
-                          if (zone.headCount != null)
-                            Text('Head Count: ${zone.headCount}'),
-                          const Divider(),
-                          const Text(
-                            'Repairs in this zone:',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          if (zoneRepairs.isEmpty)
-                            const Text('No repairs logged'),
-                          ...zoneRepairs.asMap().entries.map((entry) {
-                            final repair = entry.value;
-                            return ListTile(
-                              dense: true,
-                              title: Text(repair.itemName.replaceAll('_', ' ')),
-                              subtitle: repair.notes.isNotEmpty
-                                  ? Text(repair.notes)
-                                  : null,
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('x${repair.quantity}'),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                    onPressed: () => _deleteRepair(repair, true),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            onPressed: () => _addRepair(zone.zoneNumber),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Repair'),
-                          ),
-                        ],
+                    if (inspection.otherRepairs.isEmpty)
+                      const Text('No other repairs logged'),
+                    ...inspection.otherRepairs.asMap().entries.map((entry) {
+                      final repair = entry.value;
+                      return ListTile(
+                        dense: true,
+                        title: Text(repair.itemName.replaceAll('_', ' ')),
+                        subtitle: repair.notes.isNotEmpty
+                            ? Text(repair.notes)
+                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('x${repair.quantity}'),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                              onPressed: () => _deleteRepair(repair, false),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _addOtherRepair(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Other Repair'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
                       ),
                     ),
                   ],
                 ),
-              );
-            }).toList(),
-          ],
+              ),
+            ),
 
-          // Other Repairs Section
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
-            child: Text(
-              'Other Repairs',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // Other Notes Section
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Other Notes',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Backflow, Controller, Mainline, Winterize, Wire, etc.',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ),
-          Card(
-            margin: const EdgeInsets.all(8),
-            color: Colors.orange.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (inspection.otherRepairs.isEmpty)
-                    const Text('No other repairs logged'),
-                  ...inspection.otherRepairs.asMap().entries.map((entry) {
-                    final repair = entry.value;
-                    return ListTile(
-                      dense: true,
-                      title: Text(repair.itemName.replaceAll('_', ' ')),
-                      subtitle: repair.notes.isNotEmpty
-                          ? Text(repair.notes)
-                          : null,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('x${repair.quantity}'),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                            onPressed: () => _deleteRepair(repair, false),
-                          ),
-                        ],
+            Card(
+              margin: const EdgeInsets.all(8),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      inspection.otherNotes.isEmpty
+                          ? 'No notes added'
+                          : inspection.otherNotes,
+                      style: TextStyle(
+                        color: inspection.otherNotes.isEmpty
+                            ? Colors.grey
+                            : Colors.black,
                       ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _addOtherRepair(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Other Repair'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _editOtherNotes(),
+                      icon: Icon(inspection.otherNotes.isEmpty
+                          ? Icons.add
+                          : Icons.edit),
+                      label: Text(inspection.otherNotes.isEmpty
+                          ? 'Add Notes'
+                          : 'Edit Notes'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-
-          // Other Notes Section
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Other Notes',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          Card(
-            margin: const EdgeInsets.all(8),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    inspection.otherNotes.isEmpty
-                        ? 'No notes added'
-                        : inspection.otherNotes,
-                    style: TextStyle(
-                      color: inspection.otherNotes.isEmpty
-                          ? Colors.grey
-                          : Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _editOtherNotes(),
-                    icon: Icon(inspection.otherNotes.isEmpty
-                        ? Icons.add
-                        : Icons.edit),
-                    label: Text(inspection.otherNotes.isEmpty
-                        ? 'Add Notes'
-                        : 'Edit Notes'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }

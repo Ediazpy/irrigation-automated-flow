@@ -8,12 +8,14 @@ import '../models/repair_item.dart';
 import '../models/quote.dart';
 import '../models/repair_task.dart';
 import '../models/company_settings.dart';
+import 'firestore_service.dart';
 
 // Conditional import for file operations (not available on web)
 import 'storage_io.dart' if (dart.library.html) 'storage_web.dart' as storage_impl;
 
 class StorageService {
   static const String _storageKey = 'irritrack_data';
+  static const String _syncKey = 'irritrack_firestore_sync';
 
   Map<String, User> users = {};
   Map<int, Property> properties = {};
@@ -28,6 +30,30 @@ class StorageService {
   int nextInspectionId = 1;
   int nextQuoteId = 1;
   int nextRepairTaskId = 1;
+
+  // Firestore sync - enabled by default (auto-sync)
+  bool _firestoreSyncEnabled = true; // Default to true for automatic sync
+  final FirestoreService _firestoreService = FirestoreService();
+
+  bool get firestoreSyncEnabled => _firestoreSyncEnabled;
+
+  Future<void> enableFirestoreSync() async {
+    _firestoreSyncEnabled = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncKey, true);
+  }
+
+  Future<void> disableFirestoreSync() async {
+    _firestoreSyncEnabled = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncKey, false);
+  }
+
+  Future<void> _loadSyncSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Default to true if not explicitly set to false
+    _firestoreSyncEnabled = prefs.getBool(_syncKey) ?? true;
+  }
 
   StorageService() {
     _initializeRepairItems();
@@ -127,13 +153,78 @@ class StorageService {
         // Use file system for mobile
         await storage_impl.saveToFile(jsonString);
       }
+
+      // Sync to Firestore if enabled
+      if (_firestoreSyncEnabled) {
+        await _syncToFirestore();
+      }
     } catch (e) {
       print('Error saving data: $e');
     }
   }
 
+  Future<void> _syncToFirestore() async {
+    try {
+      await _firestoreService.uploadAllData(
+        users: users,
+        properties: properties,
+        inspections: inspections,
+        quotes: quotes,
+        repairTasks: repairTasks,
+        companySettings: companySettings,
+        nextPropertyId: nextPropertyId,
+        nextInspectionId: nextInspectionId,
+        nextQuoteId: nextQuoteId,
+        nextRepairTaskId: nextRepairTaskId,
+      );
+    } catch (e) {
+      print('Error syncing to Firestore: $e');
+    }
+  }
+
+  /// Download all data from Firestore and replace local data
+  Future<bool> downloadFromFirestore() async {
+    try {
+      final data = await _firestoreService.downloadAllData();
+
+      users = data['users'] as Map<String, User>;
+      properties = data['properties'] as Map<int, Property>;
+      inspections = data['inspections'] as Map<int, Inspection>;
+      quotes = data['quotes'] as Map<int, Quote>;
+      repairTasks = data['repair_tasks'] as Map<int, RepairTask>;
+      companySettings = data['company_settings'] as CompanySettings?;
+
+      final metadata = data['metadata'] as Map<String, int>;
+      nextPropertyId = metadata['next_property_id'] ?? 1;
+      nextInspectionId = metadata['next_inspection_id'] ?? 1;
+      nextQuoteId = metadata['next_quote_id'] ?? 1;
+      nextRepairTaskId = metadata['next_repair_task_id'] ?? 1;
+
+      // Save to local storage
+      await saveData();
+      return true;
+    } catch (e) {
+      print('Error downloading from Firestore: $e');
+      return false;
+    }
+  }
+
+  /// Upload all local data to Firestore
+  Future<bool> uploadToFirestore() async {
+    try {
+      await _syncToFirestore();
+      return true;
+    } catch (e) {
+      print('Error uploading to Firestore: $e');
+      return false;
+    }
+  }
+
   Future<void> loadData() async {
     try {
+      // Load sync setting first
+      await _loadSyncSetting();
+
       String? contents;
 
       if (kIsWeb) {

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
 import 'services/storage_service.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
@@ -6,7 +10,20 @@ import 'screens/setup_screen.dart';
 import 'screens/manager_home_screen.dart';
 import 'screens/technician_home_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Enable Firestore offline persistence for field use (bad signal areas)
+  // Mobile has persistence enabled by default, but we set cache size explicitly
+  // Web needs persistence enabled manually
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
   runApp(const MyApp());
 }
 

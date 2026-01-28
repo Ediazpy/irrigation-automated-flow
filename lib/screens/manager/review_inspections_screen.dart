@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../models/inspection.dart';
 import '../../models/repair.dart';
 import '../../utils/date_formatter.dart';
+import '../../widgets/photo_image.dart';
 import 'send_quote_screen.dart';
 
 class ReviewInspectionsScreen extends StatefulWidget {
@@ -829,66 +830,89 @@ class _ReviewInspectionDetailScreenState
               const SizedBox(height: 16),
             ],
 
-            // Photos Section
-            if (widget.inspection.photos.isNotEmpty) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Repair Photos (${widget.inspection.photos.length})',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
+            // Photos Section - Now grouped by zone
+            if (widget.inspection.totalPhotoCount > 0) ...[
+              Text(
+                'Repair Photos (${widget.inspection.totalPhotoCount})',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: widget.inspection.photos.length,
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => Dialog(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                AppBar(
-                                  title: Text('Photo ${index + 1}'),
-                                  leading: IconButton(
-                                    icon: const Icon(Icons.close),
-                                    onPressed: () => Navigator.pop(context),
-                                  ),
-                                ),
-                                InteractiveViewer(
-                                  child: Image.memory(
-                                    base64Decode(widget.inspection.photos[index]),
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 120,
-                        margin: const EdgeInsets.only(right: 8),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.memory(
-                            base64Decode(widget.inspection.photos[index]),
-                            fit: BoxFit.cover,
-                          ),
+              // Display photos grouped by zone
+              ...widget.inspection.zonePhotos.entries.map((entry) {
+                final zoneNumber = entry.key;
+                final photos = entry.value;
+                if (photos.isEmpty) return const SizedBox.shrink();
+
+                final zoneName = zoneNumber == 0
+                    ? 'General/Other'
+                    : 'Zone $zoneNumber';
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        '$zoneName (${photos.length})',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
+                    ),
+                    SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: photos.length,
+                        itemBuilder: (context, index) {
+                          return GestureDetector(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => Dialog(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      AppBar(
+                                        title: Text('$zoneName - Photo ${index + 1}'),
+                                        leading: IconButton(
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () => Navigator.pop(context),
+                                        ),
+                                      ),
+                                      InteractiveViewer(
+                                        child: PhotoImage(
+                                          photoData: photos[index],
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              width: 100,
+                              margin: const EdgeInsets.only(right: 8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: PhotoImage(
+                                  photoData: photos[index],
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              }).toList(),
+              const SizedBox(height: 16),
             ],
 
             // Labor & Discount Section

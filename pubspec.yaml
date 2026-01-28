@@ -26,6 +26,12 @@ dependencies:
   # Camera/gallery photo picker
   image_picker: ^1.0.7
 
+  # Firebase
+  firebase_core: ^3.8.1
+  cloud_firestore: ^5.6.1
+  firebase_storage: ^12.4.1
+  firebase_auth: ^5.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -260,17 +260,16 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
 
       storage.saveData();
 
-      // Generate quote URL and message
-      final quoteUrl = QuoteService.generateQuoteUrl(finalQuote.accessToken);
+      // Generate message with full quote details
       final message = QuoteService.formatQuoteMessage(
         quote: finalQuote,
         property: widget.property,
-        quoteUrl: quoteUrl,
+        quoteUrl: '', // Not used - full details in message
       );
 
       // Show send options
       if (mounted) {
-        _showSendOptions(finalQuote, message, quoteUrl);
+        _showSendOptions(finalQuote, message);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,7 +283,7 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
     }
   }
 
-  void _showSendOptions(Quote quote, String message, String quoteUrl) {
+  void _showSendOptions(Quote quote, String message) {
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -305,12 +304,18 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600),
               ),
+              const SizedBox(height: 4),
+              Text(
+                'Full quote details will be included in the message',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              ),
               const SizedBox(height: 24),
               if (widget.property.clientEmail.isNotEmpty)
                 ElevatedButton.icon(
                   onPressed: () => _sendViaEmail(message),
                   icon: const Icon(Icons.email),
-                  label: Text('Send via Email (${widget.property.clientEmail})'),
+                  label: Text('Email Quote to ${widget.property.clientEmail}'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
                   ),
@@ -322,11 +327,11 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
                     QuoteService.formatSmsMessage(
                       quote: quote,
                       property: widget.property,
-                      quoteUrl: quoteUrl,
+                      quoteUrl: '', // Not used anymore
                     ),
                   ),
                   icon: const Icon(Icons.sms),
-                  label: Text('Send via SMS (${widget.property.clientPhone})'),
+                  label: Text('Text Quote to ${widget.property.clientPhone}'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
                   ),

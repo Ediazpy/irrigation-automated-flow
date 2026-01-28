@@ -1,0 +1,84 @@
+rules_version = '2';
+
+// IrriTrack Firestore Security Rules
+// Deploy via: firebase deploy --only firestore:rules
+//
+// Current auth model: App uses local auth (not Firebase Auth yet)
+// These rules use test mode with read/write allowed for now.
+// TODO: When Firebase Auth is integrated, switch to role-based rules below.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============ TEST MODE (Current) ============
+    // Allow all reads/writes while using local auth
+    // IMPORTANT: Replace with production rules before public release
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // ============ PRODUCTION RULES (Uncomment when Firebase Auth is added) ============
+    //
+    // // Helper: Check if user is authenticated
+    // function isAuthenticated() {
+    //   return request.auth != null;
+    // }
+    //
+    // // Helper: Check if user has manager role (set via custom claims)
+    // function isManager() {
+    //   return isAuthenticated() && request.auth.token.role == 'manager';
+    // }
+    //
+    // // Helper: Check if user has technician role
+    // function isTechnician() {
+    //   return isAuthenticated() && request.auth.token.role == 'technician';
+    // }
+    //
+    // // Users collection - managers only
+    // match /users/{email} {
+    //   allow read, write: if isManager();
+    // }
+    //
+    // // Properties - managers full access, technicians read only
+    // match /properties/{propertyId} {
+    //   allow read: if isAuthenticated();
+    //   allow write: if isManager();
+    // }
+    //
+    // // Inspections - all authenticated users can read/write
+    // match /inspections/{inspectionId} {
+    //   allow read, write: if isAuthenticated();
+    // }
+    //
+    // // Quotes - managers only (sensitive pricing data)
+    // match /quotes/{quoteId} {
+    //   allow read, write: if isManager();
+    // }
+    //
+    // // Repair tasks - all authenticated users
+    // match /repair_tasks/{taskId} {
+    //   allow read: if isAuthenticated();
+    //   allow write: if isManager();
+    //   // Technicians can update status of tasks assigned to them
+    //   allow update: if isTechnician() &&
+    //     resource.data.assignedTechnicians.hasAny([request.auth.token.email]);
+    // }
+    //
+    // // Company settings - managers only
+    // match /settings/{docId} {
+    //   allow read: if isAuthenticated();
+    //   allow write: if isManager();
+    // }
+    //
+    // // Metadata (ID counters) - managers only
+    // match /metadata/{docId} {
+    //   allow read, write: if isManager();
+    // }
+    //
+    // // Photo storage references - all authenticated users
+    // match /photos/{photoId} {
+    //   allow read: if isAuthenticated();
+    //   allow write: if isAuthenticated();
+    // }
+  }
+}

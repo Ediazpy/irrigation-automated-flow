@@ -290,15 +290,60 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                 ),
               ],
 
-              // Resend Button for Sent/Expired Quotes
-              if (quote.status == QuoteStatus.sent || quote.status == QuoteStatus.expired) ...[
+              // Approve/Decline Buttons for Sent Quotes
+              if (quote.status == QuoteStatus.sent) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _markQuoteApproved(quote),
+                        icon: const Icon(Icons.check_circle, size: 18),
+                        label: const Text('Approve'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _markQuoteDeclined(quote),
+                        icon: const Icon(Icons.cancel, size: 18),
+                        label: const Text('Decline'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: () => _resendQuote(quote),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Resend Quote'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                    ),
+                  ),
+                ),
+              ],
+
+              // Resend Button for Expired Quotes
+              if (quote.status == QuoteStatus.expired) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () => _resendQuote(quote),
                     icon: const Icon(Icons.refresh),
-                    label: Text(quote.status == QuoteStatus.expired ? 'Extend & Resend' : 'Resend Quote'),
+                    label: const Text('Extend & Resend'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.blue,
                     ),
@@ -478,8 +523,60 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     ),
                   ],
 
-                  // Resend Button for Sent/Expired quotes
-                  if (quote.status == QuoteStatus.sent || quote.status == QuoteStatus.expired) ...[
+                  // Approve/Decline for Sent quotes
+                  if (quote.status == QuoteStatus.sent) ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _markQuoteApproved(quote);
+                            },
+                            icon: const Icon(Icons.check_circle),
+                            label: const Text('Approve'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _markQuoteDeclined(quote);
+                            },
+                            icon: const Icon(Icons.cancel),
+                            label: const Text('Decline'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              padding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _resendQuote(quote);
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Resend Quote'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        padding: const EdgeInsets.all(16),
+                      ),
+                    ),
+                  ],
+
+                  // Resend Button for Expired quotes only
+                  if (quote.status == QuoteStatus.expired) ...[
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
                       onPressed: () {
@@ -487,7 +584,7 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                         _resendQuote(quote);
                       },
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Resend Quote'),
+                      label: const Text('Extend & Resend Quote'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
@@ -537,6 +634,110 @@ class _QuotesListScreenState extends State<QuotesListScreen>
           Text(label, style: TextStyle(color: Colors.grey.shade600)),
           Text('\$${value.toStringAsFixed(2)}'),
         ],
+      ),
+    );
+  }
+
+  void _markQuoteApproved(Quote quote) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Approve Quote'),
+        content: const Text(
+          'Mark this quote as approved by the customer?\n\n'
+          'This indicates the customer has agreed to the quote and you can schedule repairs.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _updateQuoteStatus(quote, QuoteStatus.approved);
+            },
+            icon: const Icon(Icons.check_circle),
+            label: const Text('Approve'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _markQuoteDeclined(Quote quote) {
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline Quote'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Mark this quote as declined by the customer?'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: notesController,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                hintText: 'e.g., Price too high, Changed mind...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _updateQuoteStatus(
+                quote,
+                QuoteStatus.rejected,
+                notes: notesController.text.trim(),
+              );
+            },
+            icon: const Icon(Icons.cancel),
+            label: const Text('Decline'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateQuoteStatus(Quote quote, String newStatus, {String? notes}) {
+    final storage = widget.authService.storage;
+
+    final updatedQuote = quote.copyWith(
+      status: newStatus,
+      signedAt: newStatus == QuoteStatus.approved ? DateTime.now().toIso8601String() : null,
+      clientNotes: notes?.isNotEmpty == true ? notes : quote.clientNotes,
+    );
+
+    storage.quotes[quote.id] = updatedQuote;
+    storage.saveData();
+
+    setState(() {});
+
+    final statusName = newStatus == QuoteStatus.approved ? 'approved' : 'declined';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Quote #${quote.id} marked as $statusName'),
+        backgroundColor: newStatus == QuoteStatus.approved ? Colors.green : Colors.red,
       ),
     );
   }

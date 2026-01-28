@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// IrriTrack Firebase Storage Security Rules
+// Deploy via: firebase deploy --only storage
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============ TEST MODE (Current) ============
+    // Allow all reads/writes while using local auth
+    // IMPORTANT: Replace with production rules before public release
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // ============ PRODUCTION RULES (Uncomment when Firebase Auth is added) ============
+    //
+    // // Inspection photos - authenticated users can upload, all can read
+    // match /inspections/{inspectionId}/photos/{photoId} {
+    //   allow read: if request.auth != null;
+    //   allow write: if request.auth != null
+    //     && request.resource.size < 5 * 1024 * 1024  // Max 5MB per photo
+    //     && request.resource.contentType.matches('image/.*');
+    // }
+    //
+    // // Quote signatures - managers can read, clients can write via token
+    // match /signatures/{quoteId}/{signatureId} {
+    //   allow read: if request.auth != null;
+    //   allow write: if request.auth != null
+    //     && request.resource.size < 1 * 1024 * 1024;  // Max 1MB per signature
+    // }
+  }
+}

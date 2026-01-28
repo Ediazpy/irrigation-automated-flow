@@ -22,6 +22,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   late TextEditingController _footerController;
   late int _expirationDays;
   late bool _photosRequired;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -242,6 +243,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
             const SizedBox(height: 32),
 
+            // Cloud Sync Section
+            _buildSectionHeader('Cloud Sync', Icons.cloud_sync),
+            const SizedBox(height: 12),
+            _buildCloudSyncCard(),
+
+            const SizedBox(height: 32),
+
             // Security Questions Section
             _buildSectionHeader('Security Questions', Icons.security),
             const SizedBox(height: 8),
@@ -436,6 +444,149 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCloudSyncCard() {
+    final storage = widget.authService.storage;
+    final syncEnabled = storage.firestoreSyncEnabled;
+
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: Icon(
+              syncEnabled ? Icons.cloud_done : Icons.cloud_off,
+              color: syncEnabled ? Colors.green : Colors.grey,
+            ),
+            title: const Text('Enable Cloud Sync'),
+            subtitle: Text(
+              syncEnabled
+                  ? 'Data automatically syncs to Firebase'
+                  : 'Data stored locally only',
+            ),
+            value: syncEnabled,
+            onChanged: _isSyncing
+                ? null
+                : (value) async {
+                    setState(() => _isSyncing = true);
+                    if (value) {
+                      await storage.enableFirestoreSync();
+                      // Upload current data to cloud
+                      final success = await storage.uploadToFirestore();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? 'Cloud sync enabled and data uploaded'
+                                : 'Cloud sync enabled but upload failed'),
+                            backgroundColor: success ? Colors.green : Colors.orange,
+                          ),
+                        );
+                      }
+                    } else {
+                      await storage.disableFirestoreSync();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cloud sync disabled'),
+                            backgroundColor: Colors.grey,
+                          ),
+                        );
+                      }
+                    }
+                    if (mounted) {
+                      setState(() => _isSyncing = false);
+                    }
+                  },
+          ),
+          if (syncEnabled) ...[
+            const Divider(height: 1),
+            ListTile(
+              leading: _isSyncing
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_upload),
+              title: const Text('Upload to Cloud'),
+              subtitle: const Text('Push local data to Firebase'),
+              onTap: _isSyncing
+                  ? null
+                  : () async {
+                      setState(() => _isSyncing = true);
+                      final success = await storage.uploadToFirestore();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? 'Data uploaded successfully'
+                                : 'Upload failed'),
+                            backgroundColor: success ? Colors.green : Colors.red,
+                          ),
+                        );
+                        setState(() => _isSyncing = false);
+                      }
+                    },
+            ),
+            ListTile(
+              leading: _isSyncing
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_download),
+              title: const Text('Download from Cloud'),
+              subtitle: const Text('Replace local data with cloud data'),
+              onTap: _isSyncing
+                  ? null
+                  : () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Download from Cloud?'),
+                          content: const Text(
+                            'This will replace all local data with data from Firebase. '
+                            'Any local changes not uploaded will be lost.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                              ),
+                              child: const Text('Download'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true) {
+                        setState(() => _isSyncing = true);
+                        final success = await storage.downloadFromFirestore();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success
+                                  ? 'Data downloaded successfully'
+                                  : 'Download failed'),
+                              backgroundColor: success ? Colors.green : Colors.red,
+                            ),
+                          );
+                          setState(() => _isSyncing = false);
+                        }
+                      }
+                    },
+            ),
+          ],
+        ],
       ),
     );
   }
