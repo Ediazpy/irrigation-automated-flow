@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
@@ -217,6 +218,66 @@ class InspectionHistoryScreen extends StatelessWidget {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Text(inspection.otherNotes),
+                        ),
+                        const Divider(height: 32),
+                      ],
+
+                      // Photos
+                      if (inspection.photos.isNotEmpty) ...[
+                        Text(
+                          'Repair Photos (${inspection.photos.length})',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 100,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: inspection.photos.length,
+                            itemBuilder: (ctx, i) {
+                              return GestureDetector(
+                                onTap: () {
+                                  showDialog(
+                                    context: ctx,
+                                    builder: (_) => Dialog(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AppBar(
+                                            title: Text('Photo ${i + 1}'),
+                                            leading: IconButton(
+                                              icon: const Icon(Icons.close),
+                                              onPressed: () => Navigator.pop(ctx),
+                                            ),
+                                          ),
+                                          InteractiveViewer(
+                                            child: Image.memory(
+                                              base64Decode(inspection.photos[i]),
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(
+                                      base64Decode(inspection.photos[i]),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                         const Divider(height: 32),
                       ],

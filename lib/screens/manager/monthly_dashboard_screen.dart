@@ -351,14 +351,7 @@ class _MonthlyDashboardScreenState extends State<MonthlyDashboardScreen> {
           ),
         ],
       ),
-      floatingActionButton: notAssigned > 0
-          ? FloatingActionButton.extended(
-              onPressed: _assignAllUnassigned,
-              icon: const Icon(Icons.playlist_add),
-              label: Text('Assign $notAssigned'),
-              backgroundColor: Colors.green,
-            )
-          : null,
+      floatingActionButton: null,
     );
   }
 
@@ -431,26 +424,6 @@ class _MonthlyDashboardScreenState extends State<MonthlyDashboardScreen> {
     ).then((_) => setState(() {}));
   }
 
-  void _assignAllUnassigned() {
-    final storage = widget.authService.storage;
-    final billingMonth = _getBillingMonth(selectedMonth);
-    final properties = storage.properties.values.toList();
-
-    final unassigned = properties.where((p) {
-      final status = _getPropertyStatus(p, billingMonth);
-      return status['status'] == 'not_assigned';
-    }).toList();
-
-    showDialog(
-      context: context,
-      builder: (context) => _BatchAssignDialog(
-        authService: widget.authService,
-        properties: unassigned,
-        billingMonth: billingMonth,
-        selectedMonth: selectedMonth,
-      ),
-    ).then((_) => setState(() {}));
-  }
 }
 
 class _StatusChip extends StatelessWidget {
@@ -497,123 +470,3 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _BatchAssignDialog extends StatefulWidget {
-  final AuthService authService;
-  final List<Property> properties;
-  final String billingMonth;
-  final DateTime selectedMonth;
-
-  const _BatchAssignDialog({
-    required this.authService,
-    required this.properties,
-    required this.billingMonth,
-    required this.selectedMonth,
-  });
-
-  @override
-  State<_BatchAssignDialog> createState() => _BatchAssignDialogState();
-}
-
-class _BatchAssignDialogState extends State<_BatchAssignDialog> {
-  final Set<String> selectedTechnicians = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final storage = widget.authService.storage;
-    final technicians = storage.users.entries
-        .where((e) => e.value.role == 'technician' && !e.value.isArchived)
-        .toList();
-
-    return AlertDialog(
-      title: Text('Assign ${widget.properties.length} Properties'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Month: ${DateFormat('MMMM yyyy').format(widget.selectedMonth)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            const Text('Select technician(s):'),
-            const SizedBox(height: 8),
-            if (technicians.isEmpty)
-              const Text('No technicians available', style: TextStyle(color: Colors.grey))
-            else
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 200),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: technicians.length,
-                  itemBuilder: (context, index) {
-                    final tech = technicians[index];
-                    final isSelected = selectedTechnicians.contains(tech.key);
-                    return CheckboxListTile(
-                      dense: true,
-                      value: isSelected,
-                      title: Text(tech.value.name),
-                      subtitle: Text(tech.key, style: const TextStyle(fontSize: 11)),
-                      onChanged: (v) {
-                        setState(() {
-                          if (v == true) {
-                            selectedTechnicians.add(tech.key);
-                          } else {
-                            selectedTechnicians.remove(tech.key);
-                          }
-                        });
-                      },
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: selectedTechnicians.isEmpty ? null : _performBatchAssign,
-          child: const Text('Assign All'),
-        ),
-      ],
-    );
-  }
-
-  void _performBatchAssign() {
-    final storage = widget.authService.storage;
-    final dateStr = DateFormat('MM/dd/yyyy').format(widget.selectedMonth);
-    int created = 0;
-
-    for (final property in widget.properties) {
-      final inspection = Inspection(
-        id: storage.nextInspectionId,
-        propertyId: property.id,
-        technicians: selectedTechnicians.toList(),
-        date: dateStr,
-        status: 'assigned',
-        repairs: [],
-        totalCost: 0.0,
-        billingMonth: widget.billingMonth,
-      );
-
-      storage.inspections[storage.nextInspectionId] = inspection;
-      storage.nextInspectionId++;
-      created++;
-    }
-
-    storage.saveData();
-    Navigator.pop(context);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Created $created inspections'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-}

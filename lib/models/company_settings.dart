@@ -7,6 +7,7 @@ class CompanySettings {
   final String defaultTermsAndConditions;
   final int quoteExpirationDays;
   final String defaultFooterMessage;
+  final bool photosRequired; // Manager toggle: require techs to take repair photos
 
   CompanySettings({
     required this.companyName,
@@ -17,6 +18,7 @@ class CompanySettings {
     this.defaultTermsAndConditions = defaultTerms,
     this.quoteExpirationDays = 30,
     this.defaultFooterMessage = 'Thank you for your business!',
+    this.photosRequired = false,
   });
 
   static const String defaultTerms = '''
@@ -47,6 +49,7 @@ TERMS AND CONDITIONS
       'default_terms_and_conditions': defaultTermsAndConditions,
       'quote_expiration_days': quoteExpirationDays,
       'default_footer_message': defaultFooterMessage,
+      'photos_required': photosRequired,
     };
   }
 
@@ -60,6 +63,7 @@ TERMS AND CONDITIONS
       defaultTermsAndConditions: json['default_terms_and_conditions'] ?? defaultTerms,
       quoteExpirationDays: json['quote_expiration_days'] ?? 30,
       defaultFooterMessage: json['default_footer_message'] ?? 'Thank you for your business!',
+      photosRequired: json['photos_required'] ?? false,
     );
   }
 
@@ -72,6 +76,7 @@ TERMS AND CONDITIONS
     String? defaultTermsAndConditions,
     int? quoteExpirationDays,
     String? defaultFooterMessage,
+    bool? photosRequired,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -82,6 +87,7 @@ TERMS AND CONDITIONS
       defaultTermsAndConditions: defaultTermsAndConditions ?? this.defaultTermsAndConditions,
       quoteExpirationDays: quoteExpirationDays ?? this.quoteExpirationDays,
       defaultFooterMessage: defaultFooterMessage ?? this.defaultFooterMessage,
+      photosRequired: photosRequired ?? this.photosRequired,
     );
   }
 }

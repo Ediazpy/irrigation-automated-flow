@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
+import '../models/company_settings.dart';
 import 'manager_home_screen.dart';
+import 'manager/company_settings_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   final AuthService authService;
@@ -53,11 +55,20 @@ class _SetupScreenState extends State<SetupScreen> {
     );
 
     // Save to storage
-    widget.authService.storage.users[email] = adminUser;
-    widget.authService.storage.saveData();
+    final storage = widget.authService.storage;
+    storage.users[email] = adminUser;
 
-    // Log in the admin
+    // Save company settings with the company name from setup
+    final companyName = _companyController.text.trim();
+    if (storage.companySettings == null) {
+      storage.companySettings = CompanySettings(companyName: companyName);
+    }
+
+    storage.saveData();
+
+    // Log in the admin and persist session
     widget.authService.currentUser = adminUser;
+    await widget.authService.saveSession(email);
 
     setState(() {
       _isLoading = false;
@@ -65,10 +76,17 @@ class _SetupScreenState extends State<SetupScreen> {
 
     if (!mounted) return;
 
-    // Navigate to manager home
+    // Navigate to manager home, then immediately open settings to complete profile
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => ManagerHomeScreen(authService: widget.authService),
+      ),
+    );
+
+    // Push settings screen on top so user completes company profile
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CompanySettingsScreen(authService: widget.authService),
       ),
     );
   }

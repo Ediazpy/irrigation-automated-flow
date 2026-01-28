@@ -13,6 +13,7 @@ class Inspection {
   final String billingMonth; // Format: "2025-01" for January 2025
   final double laborCost; // Additional labor charges
   final double discount; // Discount amount
+  final List<String> photos; // Base64 encoded repair photos
 
   Inspection({
     required this.id,
@@ -27,7 +28,9 @@ class Inspection {
     this.billingMonth = '',
     this.laborCost = 0.0,
     this.discount = 0.0,
-  }) : otherRepairs = otherRepairs ?? [];
+    List<String>? photos,
+  })  : otherRepairs = otherRepairs ?? [],
+        photos = photos ?? [];
 
   // Legacy getter for backwards compatibility
   String get technician => technicians.isNotEmpty ? technicians.first : '';
@@ -45,6 +48,7 @@ class Inspection {
       'billing_month': billingMonth,
       'labor_cost': laborCost,
       'discount': discount,
+      'photos': photos,
     };
   }
 
@@ -85,6 +89,7 @@ class Inspection {
       billingMonth: json['billing_month'] ?? '',
       laborCost: (json['labor_cost'] ?? 0.0).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
+      photos: json['photos'] != null ? List<String>.from(json['photos']) : [],
     );
   }
 
@@ -107,6 +112,7 @@ class Inspection {
     String? billingMonth,
     double? laborCost,
     double? discount,
+    List<String>? photos,
   }) {
     return Inspection(
       id: id ?? this.id,
@@ -121,6 +127,7 @@ class Inspection {
       billingMonth: billingMonth ?? this.billingMonth,
       laborCost: laborCost ?? this.laborCost,
       discount: discount ?? this.discount,
+      photos: photos ?? this.photos,
     );
   }
 }

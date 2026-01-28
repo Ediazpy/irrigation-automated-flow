@@ -11,7 +11,7 @@ class MyInspectionsScreen extends StatelessWidget {
     final storage = authService.storage;
     final myEmail = authService.currentUser?.email;
     final myInspections = storage.inspections.values
-        .where((i) => i.technician == myEmail && i.status != 'completed')
+        .where((i) => i.technicians.contains(myEmail) && i.status != 'completed')
         .toList();
 
     return Scaffold(

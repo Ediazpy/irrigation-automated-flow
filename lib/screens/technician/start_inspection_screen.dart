@@ -12,7 +12,7 @@ class StartInspectionScreen extends StatelessWidget {
     final storage = authService.storage;
     final myEmail = authService.currentUser?.email;
     final myInspections = storage.inspections.entries
-        .where((e) => e.value.technician == myEmail && e.value.status != 'completed')
+        .where((e) => e.value.technicians.contains(myEmail) && e.value.status != 'completed')
         .toList();
 
     return Scaffold(

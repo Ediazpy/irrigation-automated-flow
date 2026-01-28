@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
 import '../../models/repair.dart';
 
@@ -90,6 +92,16 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
                     subtitle: const Text('View repairs from last inspection'),
                     trailing: const Icon(Icons.arrow_forward),
                     onTap: () => _viewPreviousRepairs(inspection.propertyId),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                    title: const Text('Repair Photos'),
+                    subtitle: Text('${inspection.photos.length} photo(s) taken'),
+                    trailing: const Icon(Icons.arrow_forward),
+                    onTap: () => _managePhotos(inspection),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -306,7 +318,34 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
     );
   }
 
+  void _managePhotos(inspection) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _InspectionPhotosScreen(
+          authService: widget.authService,
+          inspectionId: widget.inspectionId,
+        ),
+      ),
+    ).then((_) => setState(() {}));
+  }
+
   void _submitInspection(inspection) {
+    final storage = widget.authService.storage;
+    final photosRequired = storage.companySettings?.photosRequired ?? false;
+
+    // Check if photos are required and none taken
+    if (photosRequired && inspection.photos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photos are required before submitting. Please take at least one photo.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     final totalRepairs = inspection.repairs.length + inspection.otherRepairs.length;
     showDialog(
       context: context,
@@ -314,7 +353,8 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
         title: const Text('Submit Inspection'),
         content: Text(
           'This will complete and lock the inspection.\n\n'
-          'Repairs: $totalRepairs\n\n'
+          'Repairs: $totalRepairs\n'
+          'Photos: ${inspection.photos.length}\n\n'
           'Are you sure?',
         ),
         actions: [
@@ -324,7 +364,6 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              final storage = widget.authService.storage;
               final totalCost = inspection.calculateTotalCost();
 
               storage.inspections[widget.inspectionId] = inspection.copyWith(
@@ -344,6 +383,263 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
               );
             },
             child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Photo management screen for inspection
+class _InspectionPhotosScreen extends StatefulWidget {
+  final AuthService authService;
+  final int inspectionId;
+
+  const _InspectionPhotosScreen({
+    Key? key,
+    required this.authService,
+    required this.inspectionId,
+  }) : super(key: key);
+
+  @override
+  State<_InspectionPhotosScreen> createState() => _InspectionPhotosScreenState();
+}
+
+class _InspectionPhotosScreenState extends State<_InspectionPhotosScreen> {
+  final ImagePicker _picker = ImagePicker();
+
+  Future<void> _takePhoto() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 70,
+    );
+    if (image != null) {
+      await _savePhoto(image);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 70,
+    );
+    if (image != null) {
+      await _savePhoto(image);
+    }
+  }
+
+  Future<void> _savePhoto(XFile image) async {
+    final bytes = await image.readAsBytes();
+    final base64Str = base64Encode(bytes);
+
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId]!;
+    final updatedPhotos = List<String>.from(inspection.photos)..add(base64Str);
+
+    storage.inspections[widget.inspectionId] = inspection.copyWith(photos: updatedPhotos);
+    storage.saveData();
+
+    setState(() {});
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo saved'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  void _deletePhoto(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Photo'),
+        content: const Text('Are you sure you want to delete this photo?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              final storage = widget.authService.storage;
+              final inspection = storage.inspections[widget.inspectionId]!;
+              final updatedPhotos = List<String>.from(inspection.photos)..removeAt(index);
+              storage.inspections[widget.inspectionId] = inspection.copyWith(photos: updatedPhotos);
+              storage.saveData();
+              setState(() {});
+              Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _viewPhoto(String base64Str) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: const Text('Photo'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            InteractiveViewer(
+              child: Image.memory(
+                base64Decode(base64Str),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId]!;
+    final photosRequired = storage.companySettings?.photosRequired ?? false;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Repair Photos'),
+        actions: [
+          if (photosRequired)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Center(
+                child: Chip(
+                  label: Text('Required', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  backgroundColor: Colors.red,
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (photosRequired && inspection.photos.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              color: Colors.red.shade50,
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.red),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'At least one photo is required before submitting this inspection.',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: inspection.photos.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.no_photography, size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No photos taken yet',
+                          style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemCount: inspection.photos.length,
+                    itemBuilder: (context, index) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          GestureDetector(
+                            onTap: () => _viewPhoto(inspection.photos[index]),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                base64Decode(inspection.photos[index]),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: GestureDetector(
+                              onTap: () => _deletePhoto(index),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _takePhoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Take Photo'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickFromGallery,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Gallery'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.all(14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

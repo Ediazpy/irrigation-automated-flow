@@ -21,6 +21,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   late TextEditingController _termsController;
   late TextEditingController _footerController;
   late int _expirationDays;
+  late bool _photosRequired;
 
   @override
   void initState() {
@@ -35,6 +36,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     _footerController = TextEditingController(
         text: settings?.defaultFooterMessage ?? 'Thank you for your business!');
     _expirationDays = settings?.quoteExpirationDays ?? 30;
+    _photosRequired = settings?.photosRequired ?? false;
   }
 
   @override
@@ -59,6 +61,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       defaultTermsAndConditions: _termsController.text.trim(),
       quoteExpirationDays: _expirationDays,
       defaultFooterMessage: _footerController.text.trim(),
+      photosRequired: _photosRequired,
     );
 
     widget.authService.storage.companySettings = settings;
@@ -186,6 +189,30 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                 labelText: 'Quote Footer Message',
                 prefixIcon: Icon(Icons.message),
                 hintText: 'Thank you for your business!',
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Inspection Photos Section
+            _buildSectionHeader('Inspection Photos', Icons.camera_alt),
+            const SizedBox(height: 12),
+            Card(
+              child: SwitchListTile(
+                secondary: Icon(
+                  _photosRequired ? Icons.camera_alt : Icons.no_photography,
+                  color: _photosRequired ? Colors.green : Colors.grey,
+                ),
+                title: const Text('Require Repair Photos'),
+                subtitle: Text(
+                  _photosRequired
+                      ? 'Technicians must take photos before submitting'
+                      : 'Photos are optional for technicians',
+                ),
+                value: _photosRequired,
+                onChanged: (value) {
+                  setState(() => _photosRequired = value);
+                },
               ),
             ),
 

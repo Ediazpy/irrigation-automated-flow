@@ -23,6 +23,9 @@ dependencies:
   # URL launching (for email/SMS links)
   url_launcher: ^6.2.1
 
+  # Camera/gallery photo picker
+  image_picker: ^1.0.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

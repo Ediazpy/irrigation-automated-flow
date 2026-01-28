@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
@@ -826,6 +827,68 @@ class _ReviewInspectionDetailScreenState
                 child: Text(otherNotes),
               ),
               const SizedBox(height: 16),
+            ],
+
+            // Photos Section
+            if (widget.inspection.photos.isNotEmpty) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Repair Photos (${widget.inspection.photos.length})',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: widget.inspection.photos.length,
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => Dialog(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AppBar(
+                                  title: Text('Photo ${index + 1}'),
+                                  leading: IconButton(
+                                    icon: const Icon(Icons.close),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ),
+                                InteractiveViewer(
+                                  child: Image.memory(
+                                    base64Decode(widget.inspection.photos[index]),
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 120,
+                        margin: const EdgeInsets.only(right: 8),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            base64Decode(widget.inspection.photos[index]),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
 
             // Labor & Discount Section

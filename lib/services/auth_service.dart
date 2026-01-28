@@ -66,7 +66,7 @@ class AuthService {
     // Login successful
     resetFailedAttempts(email);
     currentUser = user;
-    await _saveSession(email);
+    await saveSession(email);
     return LoginResult(
       success: true,
       message: 'Welcome, ${user.name}!',
@@ -79,7 +79,7 @@ class AuthService {
     await _clearSession();
   }
 
-  Future<void> _saveSession(String email) async {
+  Future<void> saveSession(String email) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionKey, email);
   }

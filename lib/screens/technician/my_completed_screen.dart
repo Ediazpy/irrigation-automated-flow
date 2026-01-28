@@ -22,7 +22,7 @@ class MyCompletedScreen extends StatelessWidget {
     // Include 'completed' and 'quote_sent' but display as "Completed" to tech
     final completedInspections = storage.inspections.values
         .where((i) {
-          if (i.technician != myEmail) return false;
+          if (!i.technicians.contains(myEmail)) return false;
           // Only show completed or quote_sent (both mean work is done from tech perspective)
           if (i.status != 'completed' && i.status != 'quote_sent') return false;
 
