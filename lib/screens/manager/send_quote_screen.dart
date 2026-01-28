@@ -74,6 +74,99 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
     return _subtotal + _laborCost - _discount;
   }
 
+  List<Widget> _buildLineItemWidgets() {
+    final widgets = <Widget>[];
+    final hasMultipleControllers = widget.property.controllers.length > 1;
+
+    if (hasMultipleControllers) {
+      // Group line items by controller
+      for (var controller in widget.property.controllers) {
+        final controllerZoneNumbers = controller.zones.map((z) => z.zoneNumber).toSet();
+        final controllerItems = _lineItems
+            .where((item) => item.zoneNumber != null && controllerZoneNumbers.contains(item.zoneNumber))
+            .toList();
+
+        if (controllerItems.isNotEmpty) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4, left: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.settings_remote, size: 18, color: Colors.teal.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Controller ${controller.controllerNumber}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal.shade700,
+                    ),
+                  ),
+                  if (controller.location.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '(${controller.location})',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+          for (var item in controllerItems) {
+            widgets.add(_buildLineItemCard(_lineItems.indexOf(item), item));
+          }
+        }
+      }
+
+      // Items without zone (labor, general)
+      final noZoneItems = _lineItems.where((item) => item.zoneNumber == null).toList();
+      for (var item in noZoneItems) {
+        widgets.add(_buildLineItemCard(_lineItems.indexOf(item), item));
+      }
+    } else {
+      // Single controller or legacy - flat list
+      for (var entry in _lineItems.asMap().entries) {
+        widgets.add(_buildLineItemCard(entry.key, entry.value));
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildLineItemCard(int index, item) {
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: item.category == 'labor'
+              ? Colors.orange.shade100
+              : Colors.blue.shade100,
+          child: Icon(
+            item.category == 'labor' ? Icons.engineering : Icons.build,
+            color: item.category == 'labor' ? Colors.orange : Colors.blue,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          item.displayDescription,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Text(
+          '${item.quantity} × \$${item.unitPrice.toStringAsFixed(2)}' +
+              (item.zoneNumber != null ? ' (Zone ${item.zoneNumber})' : ''),
+        ),
+        trailing: Text(
+          '\$${item.totalPrice.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        onTap: () => _editLineItem(index),
+      ),
+    );
+  }
+
   void _editLineItem(int index) {
     final item = _lineItems[index];
     final qtyController = TextEditingController(text: item.quantity.toString());
@@ -473,41 +566,8 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
           ),
           const SizedBox(height: 8),
 
-          // Line Items List
-          ..._lineItems.asMap().entries.map((entry) {
-            final index = entry.key;
-            final item = entry.value;
-            return Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: item.category == 'labor'
-                      ? Colors.orange.shade100
-                      : Colors.blue.shade100,
-                  child: Icon(
-                    item.category == 'labor' ? Icons.engineering : Icons.build,
-                    color: item.category == 'labor' ? Colors.orange : Colors.blue,
-                    size: 20,
-                  ),
-                ),
-                title: Text(
-                  item.displayDescription,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: Text(
-                  '${item.quantity} × \$${item.unitPrice.toStringAsFixed(2)}' +
-                      (item.zoneNumber != null ? ' (Zone ${item.zoneNumber})' : ''),
-                ),
-                trailing: Text(
-                  '\$${item.totalPrice.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                onTap: () => _editLineItem(index),
-              ),
-            );
-          }),
+          // Line Items List - grouped by controller when applicable
+          ..._buildLineItemWidgets(),
 
           if (_lineItems.isEmpty)
             Card(

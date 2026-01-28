@@ -245,6 +245,76 @@ class _ReviewInspectionDetailScreenState
     return _calculateMaterialsCost() + _laborCost - _discount;
   }
 
+  Widget _buildRepairCard(Repair repair, int index, storage, {required bool isZone}) {
+    final item = storage.repairItems[repair.itemName];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(
+          repair.itemName.replaceAll('_', ' ').toUpperCase(),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isZone) Text('Zone: ${repair.zoneNumber}'),
+            Text('Quantity: ${repair.quantity}'),
+            if (item != null)
+              Text('Unit Price: \$${item.price.toStringAsFixed(2)}'),
+            if (repair.notes.isNotEmpty) Text('Notes: ${repair.notes}'),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '\$${repair.totalCost.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            PopupMenuButton<String>(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 18),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'edit') {
+                  _editRepair(repair, isZone);
+                } else if (value == 'delete') {
+                  if (isZone) {
+                    _deleteZoneRepair(index);
+                  } else {
+                    _deleteOtherRepair(index);
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _deleteZoneRepair(int index) {
     setState(() {
       zoneRepairs.removeAt(index);
@@ -403,10 +473,10 @@ class _ReviewInspectionDetailScreenState
                         labelText: 'Zone',
                         prefixIcon: Icon(Icons.location_on),
                       ),
-                      items: property.zones.map((zone) {
+                      items: property.allZones.map((zone) {
                         return DropdownMenuItem(
                           value: zone.zoneNumber,
-                          child: Text('Zone ${zone.zoneNumber}: ${zone.description}'),
+                          child: Text(zone.getDisplayName(showController: property.hasMultipleControllers)),
                         );
                       }).toList(),
                       onChanged: (value) {
@@ -649,75 +719,55 @@ class _ReviewInspectionDetailScreenState
             ),
             const SizedBox(height: 8),
             if (zoneRepairs.isNotEmpty) ...[
-              ...zoneRepairs.asMap().entries.map((entry) {
-                final index = entry.key;
-                final repair = entry.value;
-                final item = storage.repairItems[repair.itemName];
+              // Group repairs by controller if property has multiple controllers
+              if (property != null && property.controllers.length > 1) ...[
+                ...property.controllers.map((controller) {
+                  final controllerZoneNumbers = controller.zones.map((z) => z.zoneNumber).toSet();
+                  final controllerRepairs = zoneRepairs
+                      .where((r) => controllerZoneNumbers.contains(r.zoneNumber))
+                      .toList();
+                  if (controllerRepairs.isEmpty) return const SizedBox.shrink();
 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(
-                      repair.itemName.replaceAll('_', ' ').toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Zone: ${repair.zoneNumber}'),
-                        Text('Quantity: ${repair.quantity}'),
-                        if (item != null)
-                          Text(
-                              'Unit Price: \$${item.price.toStringAsFixed(2)}'),
-                        if (repair.notes.isNotEmpty) Text('Notes: ${repair.notes}'),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '\$${repair.totalCost.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Edit'),
-                                ],
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 4),
+                        child: Row(
+                          children: [
+                            Icon(Icons.settings_remote, size: 18, color: Colors.teal.shade700),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Controller ${controller.controllerNumber}',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade700,
                               ),
                             ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete, size: 18, color: Colors.red),
-                                  SizedBox(width: 8),
-                                  Text('Delete', style: TextStyle(color: Colors.red)),
-                                ],
+                            if (controller.location.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '(${controller.location})',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                               ),
-                            ),
+                            ],
                           ],
-                          onSelected: (value) {
-                            if (value == 'edit') {
-                              _editRepair(repair, true);
-                            } else if (value == 'delete') {
-                              _deleteZoneRepair(index);
-                            }
-                          },
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+                      ),
+                      ...controllerRepairs.map((repair) {
+                        final index = zoneRepairs.indexOf(repair);
+                        return _buildRepairCard(repair, index, storage, isZone: true);
+                      }),
+                    ],
+                  );
+                }),
+              ] else ...[
+                // Single controller or legacy - flat list
+                ...zoneRepairs.asMap().entries.map((entry) {
+                  return _buildRepairCard(entry.value, entry.key, storage, isZone: true);
+                }).toList(),
+              ],
               const SizedBox(height: 16),
             ],
 
@@ -739,73 +789,7 @@ class _ReviewInspectionDetailScreenState
             const SizedBox(height: 8),
             if (otherRepairs.isNotEmpty) ...[
               ...otherRepairs.asMap().entries.map((entry) {
-                final index = entry.key;
-                final repair = entry.value;
-                final item = storage.repairItems[repair.itemName];
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  color: Colors.orange.shade50,
-                  child: ListTile(
-                    title: Text(
-                      repair.itemName.replaceAll('_', ' ').toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Quantity: ${repair.quantity}'),
-                        if (item != null)
-                          Text(
-                              'Unit Price: \$${item.price.toStringAsFixed(2)}'),
-                        if (repair.notes.isNotEmpty) Text('Notes: ${repair.notes}'),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '\$${repair.totalCost.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.edit, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('Edit'),
-                                ],
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete, size: 18, color: Colors.red),
-                                  SizedBox(width: 8),
-                                  Text('Delete', style: TextStyle(color: Colors.red)),
-                                ],
-                              ),
-                            ),
-                          ],
-                          onSelected: (value) {
-                            if (value == 'edit') {
-                              _editRepair(repair, false);
-                            } else if (value == 'delete') {
-                              _deleteOtherRepair(index);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                );
+                return _buildRepairCard(entry.value, entry.key, storage, isZone: false);
               }).toList(),
               const SizedBox(height: 16),
             ],

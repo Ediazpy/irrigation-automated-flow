@@ -116,6 +116,8 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
             padding: const EdgeInsets.all(16),
             child: ElevatedButton(
               onPressed: () {
+                // Save all inspection data before exiting
+                widget.authService.storage.saveData();
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
@@ -616,6 +618,235 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
     storage.saveData();
   }
 
+  /// Build zone widgets grouped by controller with "Controller N" headers
+  List<Widget> _buildControllerZoneWidgets(property, inspection, bool photosRequired) {
+    final widgets = <Widget>[];
+
+    if (property.controllers.isNotEmpty) {
+      // Multi-controller: group zones under controller headers
+      for (var controller in property.controllers) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Icon(Icons.settings_remote, color: Colors.teal.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Controller ${controller.controllerNumber}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                if (controller.location.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '(${controller.location})',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+
+        if (controller.zones.isEmpty) {
+          widgets.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text('No zones configured', style: TextStyle(color: Colors.grey)),
+            ),
+          );
+        } else {
+          for (var zone in controller.zones) {
+            widgets.add(_buildZoneCard(zone, inspection, photosRequired, showController: property.hasMultipleControllers));
+          }
+        }
+      }
+    } else if (property.zones.isNotEmpty) {
+      // Legacy single-controller: flat zone list
+      widgets.add(
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Zone Repairs',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+      for (var zone in property.zones) {
+        widgets.add(_buildZoneCard(zone, inspection, photosRequired, showController: false));
+      }
+    }
+
+    return widgets;
+  }
+
+  /// Build a single zone card with photos, repairs, and add repair button
+  Widget _buildZoneCard(zone, inspection, bool photosRequired, {bool showController = false}) {
+    final zoneRepairs = inspection.repairs
+        .where((r) => r.zoneNumber == zone.zoneNumber)
+        .toList();
+    final zonePhotos = inspection.getZonePhotos(zone.zoneNumber);
+    final needsPhotos = photosRequired && zoneRepairs.isNotEmpty && zonePhotos.isEmpty;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ExpansionTile(
+        leading: Stack(
+          children: [
+            CircleAvatar(child: Text('${zone.zoneNumber}')),
+            if (needsPhotos)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.warning, size: 8, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+        title: Row(
+          children: [
+            Text('Zone ${zone.zoneNumber}'),
+            if (zonePhotos.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.camera_alt, size: 16, color: Colors.grey.shade600),
+              Text(' ${zonePhotos.length}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            ],
+          ],
+        ),
+        subtitle: Text(zone.description),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Head Type: ${zone.headType}'),
+                if (zone.headCount != null)
+                  Text('Head Count: ${zone.headCount}'),
+                const Divider(),
+
+                // Photos section for this zone
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.camera_alt, size: 18),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Photos (${zonePhotos.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        if (needsPhotos)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 8),
+                            child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11)),
+                          ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.camera_alt, color: Colors.teal),
+                          onPressed: () => _takeZonePhoto(zone.zoneNumber),
+                          tooltip: 'Take Photo',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.photo_library, color: Colors.teal),
+                          onPressed: () => _pickZonePhotoFromGallery(zone.zoneNumber),
+                          tooltip: 'Pick from Gallery',
+                        ),
+                        if (zonePhotos.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.visibility, color: Colors.blue),
+                            onPressed: () => _viewZonePhotos(zone.zoneNumber),
+                            tooltip: 'View Photos',
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                // Photo thumbnails
+                if (zonePhotos.isNotEmpty)
+                  SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: zonePhotos.length,
+                      itemBuilder: (context, index) {
+                        return GestureDetector(
+                          onTap: () => _viewFullPhoto(zonePhotos[index]),
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(
+                                image: photoImageProvider(zonePhotos[index]),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                const Divider(),
+                const Text(
+                  'Repairs in this zone:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (zoneRepairs.isEmpty)
+                  const Text('No repairs logged'),
+                ...zoneRepairs.asMap().entries.map((entry) {
+                  final repair = entry.value;
+                  return ListTile(
+                    dense: true,
+                    title: Text(repair.itemName.replaceAll('_', ' ')),
+                    subtitle: repair.notes.isNotEmpty
+                        ? Text(repair.notes)
+                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('x${repair.quantity}'),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                          onPressed: () => _deleteRepair(repair, true),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _addRepair(zone.zoneNumber),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Repair'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = widget.authService.storage;
@@ -648,176 +879,10 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
         ),
         body: ListView(
           children: [
-            // Zone Repairs Section
-            if (property.zones.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Zone Repairs',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              ...property.zones.map((zone) {
-                final zoneRepairs = inspection.repairs
-                    .where((r) => r.zoneNumber == zone.zoneNumber)
-                    .toList();
-                final zonePhotos = inspection.getZonePhotos(zone.zoneNumber);
-                final needsPhotos = photosRequired && zoneRepairs.isNotEmpty && zonePhotos.isEmpty;
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ExpansionTile(
-                    leading: Stack(
-                      children: [
-                        CircleAvatar(child: Text('${zone.zoneNumber}')),
-                        if (needsPhotos)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              width: 12,
-                              height: 12,
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.warning, size: 8, color: Colors.white),
-                            ),
-                          ),
-                      ],
-                    ),
-                    title: Row(
-                      children: [
-                        Text('Zone ${zone.zoneNumber}'),
-                        if (zonePhotos.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Icon(Icons.camera_alt, size: 16, color: Colors.grey.shade600),
-                          Text(' ${zonePhotos.length}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                        ],
-                      ],
-                    ),
-                    subtitle: Text(zone.description),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Head Type: ${zone.headType}'),
-                            if (zone.headCount != null)
-                              Text('Head Count: ${zone.headCount}'),
-                            const Divider(),
-
-                            // Photos section for this zone
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.camera_alt, size: 18),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Photos (${zonePhotos.length})',
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                    if (needsPhotos)
-                                      const Padding(
-                                        padding: EdgeInsets.only(left: 8),
-                                        child: Text('Required', style: TextStyle(color: Colors.red, fontSize: 11)),
-                                      ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.camera_alt, color: Colors.teal),
-                                      onPressed: () => _takeZonePhoto(zone.zoneNumber),
-                                      tooltip: 'Take Photo',
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.photo_library, color: Colors.teal),
-                                      onPressed: () => _pickZonePhotoFromGallery(zone.zoneNumber),
-                                      tooltip: 'Pick from Gallery',
-                                    ),
-                                    if (zonePhotos.isNotEmpty)
-                                      IconButton(
-                                        icon: const Icon(Icons.visibility, color: Colors.blue),
-                                        onPressed: () => _viewZonePhotos(zone.zoneNumber),
-                                        tooltip: 'View Photos',
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-
-                            // Photo thumbnails
-                            if (zonePhotos.isNotEmpty)
-                              SizedBox(
-                                height: 60,
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: zonePhotos.length,
-                                  itemBuilder: (context, index) {
-                                    return GestureDetector(
-                                      onTap: () => _viewFullPhoto(zonePhotos[index]),
-                                      child: Container(
-                                        width: 60,
-                                        height: 60,
-                                        margin: const EdgeInsets.only(right: 8),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(8),
-                                          image: DecorationImage(
-                                            image: photoImageProvider(zonePhotos[index]),
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-
-                            const Divider(),
-                            const Text(
-                              'Repairs in this zone:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            if (zoneRepairs.isEmpty)
-                              const Text('No repairs logged'),
-                            ...zoneRepairs.asMap().entries.map((entry) {
-                              final repair = entry.value;
-                              return ListTile(
-                                dense: true,
-                                title: Text(repair.itemName.replaceAll('_', ' ')),
-                                subtitle: repair.notes.isNotEmpty
-                                    ? Text(repair.notes)
-                                    : null,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('x${repair.quantity}'),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () => _deleteRepair(repair, true),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                            const SizedBox(height: 8),
-                            ElevatedButton.icon(
-                              onPressed: () => _addRepair(zone.zoneNumber),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add Repair'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+            // Zone Repairs Section - grouped by controller
+            if (property.allZones.isNotEmpty) ...[
+              // Build zone widgets grouped by controller
+              ..._buildControllerZoneWidgets(property, inspection, photosRequired),
             ],
 
             // Other Repairs Section
