@@ -11,20 +11,26 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: irritrack_mobile
+
     steps:
     - uses: actions/checkout@v4
 
     - uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.29.2'
+        flutter-version: '3.24.0'
         channel: 'stable'
 
-    - run: flutter pub get
+    - name: Get dependencies
+      run: flutter pub get
 
-    - run: flutter build web --release --base-href /irrigation-automated-flow/
+    - name: Build web
+      run: flutter build web --release --base-href /irrigation-automated-flow/
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/web
+        publish_dir: ./irritrack_mobile/build/web
