@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "867687686891",
+    "project_id": "irrigation-automated-flow",
+    "storage_bucket": "irrigation-automated-flow.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:867687686891:android:6183ef6c4fe7b5817614ae",
+        "android_client_info": {
+          "package_name": "com.example.irritrack_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfp_U5EVub5vQkpNw6LMwDr2izpBCcHvw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
