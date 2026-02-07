@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/subscription.dart';
 import '../../services/subscription_service.dart';
+import '../../services/revenuecat_service.dart';
 
 class PricingScreen extends StatefulWidget {
   final SubscriptionService subscriptionService;
@@ -129,6 +130,20 @@ class _PricingScreenState extends State<PricingScreen> {
                 .toList(),
 
             const SizedBox(height: 24),
+
+            // Use RevenueCat Paywall (mobile only) - Native UI
+            if (!kIsWeb)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: OutlinedButton.icon(
+                  onPressed: _showRevenueCatPaywall,
+                  icon: const Icon(Icons.storefront),
+                  label: const Text('View Native Paywall'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal,
+                  ),
+                ),
+              ),
 
             // Restore purchases (mobile only)
             if (!kIsWeb)
@@ -457,5 +472,43 @@ class _PricingScreenState extends State<PricingScreen> {
 
   void _contactSales() {
     launchUrl(Uri.parse('mailto:sales@irritrack.com?subject=Enterprise%20Inquiry'));
+  }
+
+  /// Show RevenueCat native paywall (mobile only)
+  Future<void> _showRevenueCatPaywall() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await RevenueCatService.presentPaywall();
+
+      if (mounted) {
+        // Check if purchase was successful
+        final isProUser = await RevenueCatService.isProUser();
+
+        if (isProUser) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Subscription activated successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          widget.onSubscriptionChanged?.call();
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/subscription.dart';
+import 'revenuecat_service.dart';
 
 /// Service for managing subscriptions across web (Stripe) and mobile (RevenueCat)
 class SubscriptionService {
@@ -19,10 +20,8 @@ class SubscriptionService {
   static const String stripePriceIdBusinessYearly = 'price_business_yearly';
 
   // RevenueCat configuration (for mobile)
-  // TODO: Replace with your actual RevenueCat keys
-  static const String revenueCatApiKeyAndroid = 'YOUR_REVENUECAT_ANDROID_KEY';
-  static const String revenueCatApiKeyIOS = 'YOUR_REVENUECAT_IOS_KEY';
-  static const String revenueCatEntitlementId = 'premium';
+  // Using RevenueCatService for actual implementation
+  static const String revenueCatEntitlementId = RevenueCatService.entitlementId;
 
   Subscription? _currentSubscription;
   String? _customerId;
@@ -242,18 +241,14 @@ class SubscriptionService {
   Future<void> initializeRevenueCat() async {
     if (kIsWeb) return;
 
-    // TODO: Implement RevenueCat initialization
-    // await Purchases.setDebugLogsEnabled(true);
-    //
-    // PurchasesConfiguration configuration;
-    // if (Platform.isAndroid) {
-    //   configuration = PurchasesConfiguration(revenueCatApiKeyAndroid);
-    // } else {
-    //   configuration = PurchasesConfiguration(revenueCatApiKeyIOS);
-    // }
-    //
-    // await Purchases.configure(configuration);
-    // await Purchases.logIn(_customerId!);
+    // RevenueCat is initialized in main.dart via RevenueCatService.initialize()
+    // Login user to sync purchases across devices
+    if (_customerId != null) {
+      await RevenueCatService.login(_customerId!);
+    }
+
+    // Check entitlements and update local subscription
+    await checkRevenueCatEntitlements();
   }
 
   /// Purchase via RevenueCat (for mobile)
@@ -261,23 +256,29 @@ class SubscriptionService {
     if (kIsWeb) return false;
 
     try {
-      // TODO: Implement RevenueCat purchase
-      // final offerings = await Purchases.getOfferings();
-      // final package = isYearly
-      //     ? offerings.current?.annual
-      //     : offerings.current?.monthly;
-      //
-      // if (package != null) {
-      //   final purchaseResult = await Purchases.purchasePackage(package);
-      //   // Handle purchase result
-      //   return purchaseResult.customerInfo.entitlements.active.containsKey(revenueCatEntitlementId);
-      // }
+      // Get the product ID based on plan and billing cycle
+      final productId = _getRevenueCatProductId(plan, isYearly);
 
-      return false;
+      // Purchase via RevenueCat
+      final success = await RevenueCatService.purchaseProduct(productId);
+
+      if (success) {
+        // Update local subscription
+        await checkRevenueCatEntitlements();
+      }
+
+      return success;
     } catch (e) {
       print('Error with RevenueCat purchase: $e');
       return false;
     }
+  }
+
+  /// Get RevenueCat product ID for a plan
+  String _getRevenueCatProductId(SubscriptionPlan plan, bool isYearly) {
+    final planPrefix = plan.name.toLowerCase(); // solo, team, business
+    final billingCycle = isYearly ? 'yearly' : 'monthly';
+    return '${planPrefix}_$billingCycle';
   }
 
   /// Check RevenueCat entitlements (for mobile)
@@ -285,13 +286,30 @@ class SubscriptionService {
     if (kIsWeb) return;
 
     try {
-      // TODO: Implement RevenueCat entitlement check
-      // final customerInfo = await Purchases.getCustomerInfo();
-      // if (customerInfo.entitlements.active.containsKey(revenueCatEntitlementId)) {
-      //   // User has active subscription
-      //   final entitlement = customerInfo.entitlements.active[revenueCatEntitlementId]!;
-      //   // Update local subscription based on entitlement
-      // }
+      // Check if user has active subscription via RevenueCat
+      final isProUser = await RevenueCatService.isProUser();
+
+      if (isProUser) {
+        // Get the active plan from RevenueCat
+        final activePlan = await RevenueCatService.getActivePlan();
+        final expirationDate = RevenueCatService.getExpirationDate();
+        final willRenew = RevenueCatService.willRenew();
+
+        // Update local subscription based on RevenueCat entitlement
+        if (_customerId != null) {
+          _currentSubscription = Subscription(
+            id: 'rc_${DateTime.now().millisecondsSinceEpoch}',
+            customerId: _customerId!,
+            plan: activePlan,
+            status: SubscriptionStatus.active,
+            startDate: DateTime.now(),
+            endDate: expirationDate,
+            revenueCatEntitlementId: revenueCatEntitlementId,
+          );
+
+          await _saveSubscription();
+        }
+      }
     } catch (e) {
       print('Error checking RevenueCat entitlements: $e');
     }
@@ -302,10 +320,15 @@ class SubscriptionService {
     if (kIsWeb) return false;
 
     try {
-      // TODO: Implement RevenueCat restore
-      // final customerInfo = await Purchases.restorePurchases();
-      // return customerInfo.entitlements.active.containsKey(revenueCatEntitlementId);
-      return false;
+      // Restore purchases via RevenueCat
+      final restored = await RevenueCatService.restorePurchases();
+
+      if (restored) {
+        // Update local subscription
+        await checkRevenueCatEntitlements();
+      }
+
+      return restored;
     } catch (e) {
       print('Error restoring purchases: $e');
       return false;

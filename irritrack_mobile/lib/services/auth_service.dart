@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user.dart';
 import 'storage_service.dart';
+import 'revenuecat_service.dart';
 
 class AuthService {
   final StorageService _storage;
@@ -67,6 +69,12 @@ class AuthService {
     resetFailedAttempts(email);
     currentUser = user;
     await saveSession(email);
+
+    // Sync with RevenueCat for subscription status (mobile only)
+    if (!kIsWeb) {
+      await RevenueCatService.login(email);
+    }
+
     return LoginResult(
       success: true,
       message: 'Welcome, ${user.name}!',
@@ -77,6 +85,11 @@ class AuthService {
   Future<void> logout() async {
     currentUser = null;
     await _clearSession();
+
+    // Logout from RevenueCat (mobile only)
+    if (!kIsWeb) {
+      await RevenueCatService.logout();
+    }
   }
 
   Future<void> saveSession(String email) async {

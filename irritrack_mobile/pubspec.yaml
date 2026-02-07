@@ -36,9 +36,9 @@ dependencies:
   pdf: ^3.10.8
   printing: ^5.12.0
 
-  # Subscriptions (uncomment when ready to integrate)
-  # purchases_flutter: ^6.0.0  # RevenueCat for mobile
-  # flutter_stripe: ^10.0.0     # Stripe for web
+  # Subscriptions - RevenueCat for mobile
+  purchases_flutter: ^8.1.0
+  purchases_ui_flutter: ^8.1.0
 
 dev_dependencies:
   flutter_test:

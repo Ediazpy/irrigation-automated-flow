@@ -5,8 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'services/storage_service.dart';
 import 'services/auth_service.dart';
+import 'services/revenuecat_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/setup_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'screens/manager_home_screen.dart';
 import 'screens/technician_home_screen.dart';
 
@@ -45,6 +47,9 @@ class _MyAppState extends State<MyApp> {
 
   Future<AuthService> _initializeApp() async {
     print('Initializing IAF App...');
+
+    // Initialize RevenueCat for mobile subscriptions
+    await RevenueCatService.initialize();
 
     // Initialize storage
     final storage = StorageService();
@@ -138,13 +143,11 @@ class IrriTrackApp extends StatelessWidget {
           fillColor: Colors.grey.shade50,
         ),
       ),
-      home: authService.storage.users.isEmpty
-          ? SetupScreen(authService: authService)
-          : authService.isLoggedIn
-              ? (authService.isManager
-                  ? ManagerHomeScreen(authService: authService)
-                  : TechnicianHomeScreen(authService: authService))
-              : LoginScreen(authService: authService),
+      home: authService.isLoggedIn
+          ? (authService.isManager
+              ? ManagerHomeScreen(authService: authService)
+              : TechnicianHomeScreen(authService: authService))
+          : WelcomeScreen(authService: authService),
     );
   }
 }

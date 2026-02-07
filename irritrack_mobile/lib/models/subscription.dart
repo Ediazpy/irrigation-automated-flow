@@ -54,7 +54,7 @@ class PlanDetails {
       monthlyPrice: 0,
       yearlyPrice: 0,
       maxUsers: 2,
-      maxProperties: 10,
+      maxProperties: -1, // unlimited
       pdfReports: true,
       cloudSync: true,
     ),
@@ -65,7 +65,7 @@ class PlanDetails {
       monthlyPrice: 29,
       yearlyPrice: 290, // ~2 months free
       maxUsers: 1,
-      maxProperties: 50,
+      maxProperties: -1, // unlimited
       pdfReports: true,
       cloudSync: true,
     ),
@@ -76,7 +76,7 @@ class PlanDetails {
       monthlyPrice: 59,
       yearlyPrice: 590, // ~2 months free
       maxUsers: 5,
-      maxProperties: 200,
+      maxProperties: -1, // unlimited
       pdfReports: true,
       cloudSync: true,
     ),
