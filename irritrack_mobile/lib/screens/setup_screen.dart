@@ -45,8 +45,8 @@ class _SetupScreenState extends State<SetupScreen> {
       _isLoading = true;
     });
 
-    // Create the admin user
-    final email = _emailController.text.trim();
+    // Create the admin user (normalize email to lowercase)
+    final email = _emailController.text.trim().toLowerCase();
     final adminUser = User(
       email: email,
       name: _nameController.text.trim(),
@@ -154,10 +154,21 @@ class _SetupScreenState extends State<SetupScreen> {
                         setState(() => _currentStep = 1);
                       }
                     } else if (_currentStep == 1) {
+                      final email = _emailController.text.trim().toLowerCase();
+                      // Check if email is valid and not already in use
                       if (_nameController.text.isNotEmpty &&
-                          _emailController.text.isNotEmpty &&
-                          _emailController.text.contains('@')) {
-                        setState(() => _currentStep = 2);
+                          email.isNotEmpty &&
+                          email.contains('@')) {
+                        if (widget.authService.storage.users.containsKey(email)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('This email is already registered. Please use a different email or login.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        } else {
+                          setState(() => _currentStep = 2);
+                        }
                       }
                     } else if (_currentStep == 2) {
                       _completeSetup();
@@ -259,6 +270,11 @@ class _SetupScreenState extends State<SetupScreen> {
                               }
                               if (!value.contains('@')) {
                                 return 'Please enter a valid email';
+                              }
+                              // Check if email already exists
+                              final email = value.trim().toLowerCase();
+                              if (widget.authService.storage.users.containsKey(email)) {
+                                return 'This email is already registered';
                               }
                               return null;
                             },

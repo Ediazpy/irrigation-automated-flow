@@ -429,7 +429,8 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                final email = emailController.text.trim();
+                // Normalize email to lowercase for consistent checking
+                final email = emailController.text.trim().toLowerCase();
                 final name = nameController.text.trim();
                 final password = passwordController.text.trim();
 
@@ -456,8 +457,8 @@ class _UsersScreenState extends State<UsersScreen> {
                 if (widget.authService.storage.users.containsKey(email)) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Email already exists'),
-                      backgroundColor: Colors.orange,
+                      content: Text('This email is already registered'),
+                      backgroundColor: Colors.red,
                     ),
                   );
                   return;
