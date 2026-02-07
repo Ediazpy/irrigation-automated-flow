@@ -9,8 +9,12 @@ import 'revenuecat_stub.dart'
 /// RevenueCat service for handling in-app purchases and subscriptions
 /// This is a wrapper that delegates to platform-specific implementations
 class RevenueCatService {
-  // Your RevenueCat API key
-  static const String _apiKey = 'test_dALHGnXJUDKifLOpOZqDvrIsxCR';
+  // RevenueCat API key - loaded from environment variable
+  // Set this in your build: --dart-define=REVENUECAT_API_KEY=your_key
+  static const String _apiKey = String.fromEnvironment(
+    'REVENUECAT_API_KEY',
+    defaultValue: '', // Empty default - must be provided at build time
+  );
 
   // Entitlement identifier (set this in RevenueCat dashboard)
   static const String entitlementId = 'Irrigation Automated Flow Pro';

@@ -27,7 +27,7 @@ jobs:
       run: flutter pub get
 
     - name: Build web
-      run: flutter build web --release --base-href /irrigation-automated-flow/
+      run: flutter build web --release --base-href /irrigation-automated-flow/ --dart-define=REVENUECAT_API_KEY=${{ secrets.REVENUECAT_API_KEY }}
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
