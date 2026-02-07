@@ -15,6 +15,9 @@ import 'manager/monthly_report_screen.dart';
 import 'manager/quotes_list_screen.dart';
 import 'manager/repair_tasks_list_screen.dart';
 import 'manager/company_settings_screen.dart';
+import 'technician/my_inspections_screen.dart';
+import 'technician/start_inspection_screen.dart';
+import 'technician/create_walk_screen.dart';
 import 'login_screen.dart';
 
 class ManagerHomeScreen extends StatelessWidget {
@@ -34,12 +37,6 @@ class ManagerHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    // Responsive columns: 2 on mobile, 3 on tablet, 4 on desktop/web
-    final crossAxisCount = screenWidth > 900 ? 4 : (screenWidth > 600 ? 3 : 2);
-    // Keep cards compact - max width ~160px per card
-    final childAspectRatio = screenWidth > 600 ? 1.2 : 1.0;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manager Dashboard'),
@@ -59,7 +56,7 @@ class ManagerHomeScreen extends StatelessWidget {
             Expanded(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
+                  constraints: const BoxConstraints(maxWidth: 700),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -80,7 +77,7 @@ class ManagerHomeScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'IAF - Commercial Irrigation',
+                                  'IAF - Commercial Irrigation Manager',
                                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                         color: Colors.grey,
                                       ),
@@ -89,32 +86,63 @@ class ManagerHomeScreen extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
 
                         // Menu Options
                         Expanded(
-                          child: GridView.count(
-                            crossAxisCount: crossAxisCount,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: childAspectRatio,
+                          child: ListView(
                             children: [
+                              // Field Work Section
+                              _SectionHeader(title: 'Field Work'),
                               _MenuCard(
-                                icon: Icons.build,
-                                title: 'Repair Items',
+                                icon: Icons.assignment_outlined,
+                                title: 'My Assigned Inspections',
+                                subtitle: 'View inspections assigned to you',
                                 color: Colors.blue,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (context) => RepairItemsScreen(authService: authService),
+                                      builder: (context) => MyInspectionsScreen(authService: authService),
                                     ),
                                   );
                                 },
                               ),
                               _MenuCard(
+                                icon: Icons.play_arrow,
+                                title: 'Start/Continue Inspection',
+                                subtitle: 'Walk properties assigned to you',
+                                color: Colors.green,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => StartInspectionScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _MenuCard(
+                                icon: Icons.add_location_alt,
+                                title: 'New Property Inspection',
+                                subtitle: 'Create property and start inspection',
+                                color: Colors.orange,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => CreateWalkScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Management Section
+                              _SectionHeader(title: 'Management'),
+                              _MenuCard(
                                 icon: Icons.home_work,
                                 title: 'Properties',
-                                color: Colors.green,
+                                subtitle: 'Manage all properties',
+                                color: Colors.teal,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
@@ -126,7 +154,8 @@ class ManagerHomeScreen extends StatelessWidget {
                               _MenuCard(
                                 icon: Icons.calendar_month,
                                 title: 'Scheduling',
-                                color: Colors.orange,
+                                subtitle: 'Monthly inspection calendar',
+                                color: Colors.deepOrange,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
@@ -137,8 +166,9 @@ class ManagerHomeScreen extends StatelessWidget {
                               ),
                               _MenuCard(
                                 icon: Icons.rate_review,
-                                title: 'Review',
-                                color: Colors.orange.shade700,
+                                title: 'Review Inspections',
+                                subtitle: 'Review submitted inspections',
+                                color: Colors.amber.shade700,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
@@ -149,7 +179,8 @@ class ManagerHomeScreen extends StatelessWidget {
                               ),
                               _MenuCard(
                                 icon: Icons.check_circle,
-                                title: 'Completed',
+                                title: 'Completed Inspections',
+                                subtitle: 'View all completed inspections',
                                 color: Colors.purple,
                                 onTap: () {
                                   Navigator.of(context).push(
@@ -161,8 +192,9 @@ class ManagerHomeScreen extends StatelessWidget {
                               ),
                               _MenuCard(
                                 icon: Icons.history,
-                                title: 'History',
-                                color: Colors.teal,
+                                title: 'Inspection History',
+                                subtitle: 'Historical inspection records',
+                                color: Colors.blueGrey,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
@@ -171,45 +203,15 @@ class ManagerHomeScreen extends StatelessWidget {
                                   );
                                 },
                               ),
-                              _MenuCard(
-                                icon: Icons.people,
-                                title: 'Users',
-                                color: Colors.indigo,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => UsersScreen(authService: authService),
-                                    ),
-                                  );
-                                },
-                              ),
-                              _MenuCard(
-                                icon: Icons.assessment,
-                                title: 'Reports',
-                                color: Colors.cyan,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => MonthlyReportScreen(authService: authService),
-                                    ),
-                                  );
-                                },
-                              ),
-                              _MenuCard(
-                                icon: Icons.restart_alt,
-                                title: 'Monthly Reset',
-                                color: Colors.red,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => MonthlyResetScreen(authService: authService),
-                                    ),
-                                  );
-                                },
-                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Quotes & Repairs Section
+                              _SectionHeader(title: 'Quotes & Repairs'),
                               _MenuCard(
                                 icon: Icons.receipt_long,
                                 title: 'Quotes',
+                                subtitle: 'Manage customer quotes',
                                 color: Colors.pink,
                                 onTap: () {
                                   Navigator.of(context).push(
@@ -222,6 +224,7 @@ class ManagerHomeScreen extends StatelessWidget {
                               _MenuCard(
                                 icon: Icons.construction,
                                 title: 'Repair Tasks',
+                                subtitle: 'Manage approved repair tasks',
                                 color: Colors.amber,
                                 onTap: () {
                                   Navigator.of(context).push(
@@ -232,9 +235,67 @@ class ManagerHomeScreen extends StatelessWidget {
                                 },
                               ),
                               _MenuCard(
+                                icon: Icons.build,
+                                title: 'Repair Items & Pricing',
+                                subtitle: 'Configure repair item prices',
+                                color: Colors.indigo,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => RepairItemsScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                              const SizedBox(height: 16),
+
+                              // Administration Section
+                              _SectionHeader(title: 'Administration'),
+                              _MenuCard(
+                                icon: Icons.people,
+                                title: 'Users',
+                                subtitle: 'Manage technicians and users',
+                                color: Colors.cyan,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => UsersScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _MenuCard(
+                                icon: Icons.assessment,
+                                title: 'Reports',
+                                subtitle: 'Generate monthly reports',
+                                color: Colors.lightBlue,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => MonthlyReportScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _MenuCard(
+                                icon: Icons.restart_alt,
+                                title: 'Monthly Reset',
+                                subtitle: 'Reset for new month cycle',
+                                color: Colors.red,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => MonthlyResetScreen(authService: authService),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _MenuCard(
                                 icon: Icons.settings,
-                                title: 'Settings',
-                                color: Colors.grey,
+                                title: 'Company Settings',
+                                subtitle: 'Configure company information',
+                                color: Colors.grey.shade700,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
@@ -243,6 +304,8 @@ class ManagerHomeScreen extends StatelessWidget {
                                   );
                                 },
                               ),
+
+                              const SizedBox(height: 24),
                             ],
                           ),
                         ),
@@ -259,9 +322,30 @@ class ManagerHomeScreen extends StatelessWidget {
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader({Key? key, required this.title}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+      ),
+    );
+  }
+}
+
 class _MenuCard extends StatelessWidget {
   final IconData icon;
   final String title;
+  final String subtitle;
   final Color color;
   final VoidCallback onTap;
 
@@ -269,43 +353,45 @@ class _MenuCard extends StatelessWidget {
     Key? key,
     required this.icon,
     required this.title,
+    required this.subtitle,
     required this.color,
     required this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 600;
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(isWide ? 12 : 16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: isWide ? 32 : 40,
-                color: color,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: isWide ? 13 : 15,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            icon,
+            size: 28,
+            color: color,
           ),
         ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: onTap,
       ),
     );
   }
