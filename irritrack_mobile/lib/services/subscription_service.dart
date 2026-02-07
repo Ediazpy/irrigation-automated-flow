@@ -20,8 +20,7 @@ class SubscriptionService {
   static const String stripePriceIdBusinessYearly = 'price_business_yearly';
 
   // RevenueCat configuration (for mobile)
-  // Using RevenueCatService for actual implementation
-  static const String revenueCatEntitlementId = RevenueCatService.entitlementId;
+  static const String revenueCatEntitlementId = 'Irrigation Automated Flow Pro';
 
   Subscription? _currentSubscription;
   String? _customerId;

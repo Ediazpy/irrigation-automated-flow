@@ -1,9 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import '../models/subscription.dart' as local;
 
 // Conditional imports for RevenueCat (mobile only)
-// ignore: depend_on_referenced_packages
+// Web uses stub, mobile uses actual implementation
 import 'revenuecat_stub.dart'
     if (dart.library.io) 'revenuecat_mobile.dart' as revenuecat;
 
