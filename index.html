@@ -34,5 +34,29 @@
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Service worker registration with update handling
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('flutter_service_worker.js?v=2253704849').then(function(registration) {
+          // Check for updates every time the app loads
+          registration.update();
+
+          // Listen for new service worker
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New version available - show refresh prompt
+                if (confirm('A new version is available! Click OK to update.')) {
+                  window.location.reload();
+                }
+              }
+            });
+          });
+        });
+      });
+    }
+  </script>
 </body>
 </html>
