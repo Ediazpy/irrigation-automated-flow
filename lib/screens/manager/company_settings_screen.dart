@@ -22,6 +22,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   late TextEditingController _footerController;
   late int _expirationDays;
   late bool _photosRequired;
+  late TextEditingController _masterResetCodeController;
   bool _isSyncing = false;
 
   @override
@@ -38,6 +39,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         text: settings?.defaultFooterMessage ?? 'Thank you for your business!');
     _expirationDays = settings?.quoteExpirationDays ?? 30;
     _photosRequired = settings?.photosRequired ?? false;
+    _masterResetCodeController = TextEditingController(text: settings?.masterResetCode ?? '');
   }
 
   @override
@@ -48,6 +50,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     _addressController.dispose();
     _termsController.dispose();
     _footerController.dispose();
+    _masterResetCodeController.dispose();
     super.dispose();
   }
 
@@ -63,6 +66,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       quoteExpirationDays: _expirationDays,
       defaultFooterMessage: _footerController.text.trim(),
       photosRequired: _photosRequired,
+      masterResetCode: _masterResetCodeController.text.trim(),
     );
 
     widget.authService.storage.companySettings = settings;
@@ -259,6 +263,26 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             ),
             const SizedBox(height: 12),
             _buildSecurityQuestionsCard(),
+
+            const SizedBox(height: 32),
+
+            // Master Reset Code Section
+            _buildSectionHeader('Master Reset Code', Icons.vpn_key),
+            const SizedBox(height: 8),
+            Text(
+              'Set a master code that can be used to reset a locked-out admin account. Share this code only with your dev team or trusted support.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _masterResetCodeController,
+              decoration: const InputDecoration(
+                labelText: 'Master Reset Code',
+                prefixIcon: Icon(Icons.vpn_key),
+                hintText: 'Enter a secure code (e.g. 6+ characters)',
+                helperText: 'Used for emergency admin password recovery',
+              ),
+            ),
 
             const SizedBox(height: 32),
 

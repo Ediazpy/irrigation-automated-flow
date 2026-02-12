@@ -19,6 +19,7 @@ class FirestoreService {
   static const String _repairTasksCollection = 'repair_tasks';
   static const String _settingsCollection = 'settings';
   static const String _metadataCollection = 'metadata';
+  static const String _resetRequestsCollection = 'password_reset_requests';
 
   // Singleton pattern
   static final FirestoreService _instance = FirestoreService._internal();
@@ -321,6 +322,51 @@ class FirestoreService {
     });
 
     await batch.commit();
+  }
+
+  // ============ PASSWORD RESET REQUESTS ============
+
+  /// Submit a password reset request (locked-out admin → dev team)
+  Future<void> submitResetRequest(String email, String name) async {
+    await _firestore.collection(_resetRequestsCollection).doc(email).set({
+      'email': email,
+      'name': name,
+      'status': 'pending', // pending, approved, denied
+      'requested_at': FieldValue.serverTimestamp(),
+      'new_password': '', // Dev fills this in when approving
+    });
+  }
+
+  /// Check if a reset request has been approved and get the new password
+  Future<Map<String, dynamic>?> checkResetRequest(String email) async {
+    final doc = await _firestore.collection(_resetRequestsCollection).doc(email).get();
+    if (doc.exists && doc.data() != null) {
+      return doc.data();
+    }
+    return null;
+  }
+
+  /// Delete a processed reset request
+  Future<void> deleteResetRequest(String email) async {
+    await _firestore.collection(_resetRequestsCollection).doc(email).delete();
+  }
+
+  /// Get all pending reset requests (for dev/admin tool)
+  Future<List<Map<String, dynamic>>> getPendingResetRequests() async {
+    final snapshot = await _firestore
+        .collection(_resetRequestsCollection)
+        .where('status', isEqualTo: 'pending')
+        .get();
+    return snapshot.docs.map((doc) => {'email': doc.id, ...doc.data()}).toList();
+  }
+
+  /// Approve a reset request with a new temporary password (dev/admin tool)
+  Future<void> approveResetRequest(String email, String newPassword) async {
+    await _firestore.collection(_resetRequestsCollection).doc(email).update({
+      'status': 'approved',
+      'new_password': newPassword,
+      'approved_at': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Download all data from Firestore

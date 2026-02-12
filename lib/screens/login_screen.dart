@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 import '../models/user.dart';
 import 'manager_home_screen.dart';
 import 'technician_home_screen.dart';
@@ -150,12 +151,153 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // Manager must have security questions set up
     if (!user.hasSecurityQuestions()) {
+      _showAlternateResetOptions(user);
+      return;
+    }
+
+    // Show security question challenge
+    _showSecurityQuestionChallenge(user);
+  }
+
+  void _showAlternateResetOptions(User user) {
+    final hasMasterCode = widget.authService.storage.companySettings?.masterResetCode.isNotEmpty == true;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Password Recovery'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Security questions have not been set up. Choose a recovery option:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            if (hasMasterCode)
+              ListTile(
+                leading: const Icon(Icons.vpn_key, color: Colors.teal),
+                title: const Text('Use Master Reset Code'),
+                subtitle: const Text('Enter the code provided by your admin/dev team'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showMasterCodeDialog(user);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.send, color: Colors.orange),
+              title: const Text('Request Reset from Dev Team'),
+              subtitle: const Text('Send a reset request via cloud'),
+              onTap: () {
+                Navigator.pop(context);
+                _submitResetRequest(user);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.refresh, color: Colors.blue),
+              title: const Text('Check Reset Status'),
+              subtitle: const Text('Check if your reset request was approved'),
+              onTap: () {
+                Navigator.pop(context);
+                _checkResetRequestStatus(user);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMasterCodeDialog(User user) {
+    final codeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Master Reset Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the master reset code to reset your password:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: codeController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Master Code',
+                prefixIcon: Icon(Icons.vpn_key),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final enteredCode = codeController.text.trim();
+              final masterCode = widget.authService.storage.companySettings?.masterResetCode ?? '';
+
+              if (enteredCode.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter the master code'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              if (enteredCode == masterCode) {
+                Navigator.pop(context);
+                _showNewPasswordDialog(user);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid master code'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _submitResetRequest(User user) async {
+    try {
+      final firestoreService = FirestoreService();
+      await firestoreService.submitResetRequest(user.email, user.name);
+
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Security Questions Not Set'),
-          content: const Text(
-            'You have not set up security questions. Please contact support or use another account to access Settings and set up security questions.',
+          title: const Text('Request Sent'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your password reset request has been sent to the dev team.',
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Email: ${user.email}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Once approved, come back and tap "Forgot Password" > "Check Reset Status" to set your new password.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -165,11 +307,76 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       );
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
+      );
     }
+  }
 
-    // Show security question challenge
-    _showSecurityQuestionChallenge(user);
+  void _checkResetRequestStatus(User user) async {
+    try {
+      final firestoreService = FirestoreService();
+      final request = await firestoreService.checkResetRequest(user.email);
+
+      if (!mounted) return;
+
+      if (request == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No reset request found. Submit one first.'), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+
+      final status = request['status'] ?? 'pending';
+
+      if (status == 'approved') {
+        final newPassword = request['new_password'] ?? '';
+        if (newPassword.isNotEmpty) {
+          // Apply the approved password reset
+          final storage = widget.authService.storage;
+          storage.users[user.email] = user.copyWith(password: newPassword);
+          storage.failedAttempts.remove(user.email);
+          await storage.saveData();
+
+          // Clean up the request
+          await firestoreService.deleteResetRequest(user.email);
+
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Password Reset!'),
+              content: const Text(
+                'Your password has been reset by the dev team. You can now log in with the temporary password they provided. Please change it after logging in.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else if (status == 'denied') {
+        await firestoreService.deleteResetRequest(user.email);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your reset request was denied. Contact the dev team directly.'), backgroundColor: Colors.red),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your request is still pending. Please wait for the dev team to approve it.'), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error checking status: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   void _showSecurityQuestionChallenge(User user) {

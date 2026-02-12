@@ -53,6 +53,18 @@ class _MyAppState extends State<MyApp> {
       print('Loading data...');
       await storage.loadData();
       print('Data loaded successfully');
+
+      // If local data is empty but Firestore sync is enabled,
+      // try to download from cloud (handles web<->mobile sync)
+      if (storage.users.isEmpty && storage.firestoreSyncEnabled) {
+        print('Local data empty, attempting cloud download...');
+        final downloaded = await storage.downloadFromFirestore();
+        if (downloaded) {
+          print('Cloud data downloaded successfully');
+        } else {
+          print('No cloud data available or download failed');
+        }
+      }
     } catch (e) {
       print('Error loading data (using defaults): $e');
     }
