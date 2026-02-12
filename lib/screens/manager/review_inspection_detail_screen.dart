@@ -51,11 +51,15 @@ class _ReviewInspectionDetailScreenState
     super.dispose();
   }
 
-  double get _laborCost =>
-      double.tryParse(_laborCostController.text) ?? 0.0;
+  double get _laborCost {
+    final val = double.tryParse(_laborCostController.text) ?? 0.0;
+    return val < 0 ? 0.0 : val;
+  }
 
-  double get _discount =>
-      double.tryParse(_discountController.text) ?? 0.0;
+  double get _discount {
+    final val = double.tryParse(_discountController.text) ?? 0.0;
+    return val < 0 ? 0.0 : val;
+  }
 
   void _saveChanges() {
     final storage = widget.authService.storage;
@@ -91,7 +95,9 @@ class _ReviewInspectionDetailScreenState
   }
 
   double _calculateTotalCost() {
-    return _calculateMaterialsCost() + _laborCost - _discount;
+    final subtotal = _calculateMaterialsCost() + _laborCost;
+    final total = subtotal - _discount;
+    return total < 0 ? 0.0 : total;
   }
 
   Widget _buildRepairCard(Repair repair, int index, dynamic storage,

@@ -49,7 +49,10 @@ class Quote {
 
   double get subtotal => materialsCost + laborCost;
 
-  double get totalCost => subtotal - discount;
+  double get totalCost {
+    final total = subtotal - discount;
+    return total < 0 ? 0.0 : total;
+  }
 
   bool get isExpired {
     if (expiresAt == null) return false;

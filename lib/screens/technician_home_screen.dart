@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 import 'technician/my_inspections_screen.dart';
 import 'technician/start_inspection_screen.dart';
 import 'technician/create_walk_screen.dart';
@@ -28,6 +29,7 @@ class TechnicianHomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Technician Dashboard'),
         actions: [
+          _SyncIndicator(storage: authService.storage),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => _logout(context),
@@ -68,6 +70,29 @@ class TechnicianHomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              // Price setup notice
+              if (!authService.storage.hasPricesConfigured)
+                Card(
+                  color: Colors.orange.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange.shade700),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Repair item prices have not been configured yet. Contact your manager to set up pricing before starting inspections.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // Menu Options
@@ -152,6 +177,64 @@ class TechnicianHomeScreen extends StatelessWidget {
         ),
         ),
       ),
+    );
+  }
+}
+
+class _SyncIndicator extends StatefulWidget {
+  final StorageService storage;
+  const _SyncIndicator({Key? key, required this.storage}) : super(key: key);
+
+  @override
+  State<_SyncIndicator> createState() => _SyncIndicatorState();
+}
+
+class _SyncIndicatorState extends State<_SyncIndicator> {
+  bool _syncing = false;
+
+  Future<void> _manualSync() async {
+    setState(() => _syncing = true);
+    try {
+      await widget.storage.uploadToFirestore();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data synced to cloud'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.storage.firestoreSyncEnabled;
+    return IconButton(
+      icon: _syncing
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : Icon(
+              enabled ? Icons.cloud_done : Icons.cloud_off,
+              color: enabled ? Colors.white : Colors.white54,
+            ),
+      tooltip: enabled ? 'Cloud sync enabled (tap to sync now)' : 'Cloud sync disabled',
+      onPressed: enabled && !_syncing ? _manualSync : null,
     );
   }
 }

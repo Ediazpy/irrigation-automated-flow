@@ -56,10 +56,29 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
   }
 
   void _showApprovalFlow() {
+    if (_quote!.isExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This quote has expired and can no longer be approved.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     setState(() => _showSignaturePad = true);
   }
 
   void _onSignatureComplete(String signature) {
+    if (_quote!.isExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This quote has expired and can no longer be approved.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      setState(() => _showSignaturePad = false);
+      return;
+    }
     setState(() => _isProcessing = true);
 
     _quote = _quote!.copyWith(
@@ -83,6 +102,15 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
   }
 
   void _rejectQuote() {
+    if (_quote!.isExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This quote has expired.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) {

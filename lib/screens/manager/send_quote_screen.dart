@@ -328,6 +328,34 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
       return;
     }
 
+    // Check for existing active quote on this inspection
+    final storage = widget.authService.storage;
+    final existingQuote = storage.quotes.values.where((q) =>
+        q.inspectionId == widget.inspection.id &&
+        (q.status == QuoteStatus.sent || q.status == QuoteStatus.viewed || q.status == QuoteStatus.approved));
+    if (existingQuote.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Quote Already Exists'),
+          content: Text(
+            'A quote (#${existingQuote.first.id}) already exists for this inspection with status "${QuoteStatus.getDisplayName(existingQuote.first.status)}". Create another?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Create Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
     setState(() => _isLoading = true);
 
     try {

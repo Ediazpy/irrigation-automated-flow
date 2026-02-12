@@ -377,6 +377,11 @@ class StorageService {
         .toList();
   }
 
+  /// Check if any repair item prices have been configured (non-zero)
+  bool get hasPricesConfigured {
+    return repairItems.values.any((item) => item.price > 0);
+  }
+
   // Get all technicians (non-manager users)
   List<User> getTechnicians() {
     return users.values

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 import 'manager/repair_items_screen.dart';
 import 'manager/properties_screen.dart';
 import 'manager/assign_inspection_screen.dart';
@@ -43,6 +44,7 @@ class ManagerHomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Manager Dashboard'),
         actions: [
+          _SyncIndicator(storage: authService.storage),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => _logout(context),
@@ -83,6 +85,52 @@ class ManagerHomeScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Price setup prompt
+                  if (!authService.storage.hasPricesConfigured)
+                    Card(
+                      color: Colors.orange.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber, color: Colors.orange.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Repair item prices not configured',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Set prices in Repair Items before technicians begin inspections.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => RepairItemsScreen(authService: authService),
+                                  ),
+                                );
+                              },
+                              child: const Text('Set Prices'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 24),
 
                   // Menu Options
@@ -246,6 +294,64 @@ class ManagerHomeScreen extends StatelessWidget {
         ),
         ),
       ),
+    );
+  }
+}
+
+class _SyncIndicator extends StatefulWidget {
+  final StorageService storage;
+  const _SyncIndicator({Key? key, required this.storage}) : super(key: key);
+
+  @override
+  State<_SyncIndicator> createState() => _SyncIndicatorState();
+}
+
+class _SyncIndicatorState extends State<_SyncIndicator> {
+  bool _syncing = false;
+
+  Future<void> _manualSync() async {
+    setState(() => _syncing = true);
+    try {
+      await widget.storage.uploadToFirestore();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data synced to cloud'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.storage.firestoreSyncEnabled;
+    return IconButton(
+      icon: _syncing
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : Icon(
+              enabled ? Icons.cloud_done : Icons.cloud_off,
+              color: enabled ? Colors.white : Colors.white54,
+            ),
+      tooltip: enabled ? 'Cloud sync enabled (tap to sync now)' : 'Cloud sync disabled',
+      onPressed: enabled && !_syncing ? _manualSync : null,
     );
   }
 }
