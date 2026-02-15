@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final result = await widget.authService.login(
-      _emailController.text.trim(),
+      _emailController.text.trim().toLowerCase(),
       _passwordController.text,
     );
 

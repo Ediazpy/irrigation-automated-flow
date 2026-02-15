@@ -429,7 +429,7 @@ class _UsersScreenState extends State<UsersScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                final email = emailController.text.trim();
+                final email = emailController.text.trim().toLowerCase();
                 final name = nameController.text.trim();
                 final password = passwordController.text.trim();
 

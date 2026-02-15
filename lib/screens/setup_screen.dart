@@ -46,7 +46,7 @@ class _SetupScreenState extends State<SetupScreen> {
     });
 
     // Create the admin user
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     final adminUser = User(
       email: email,
       name: _nameController.text.trim(),

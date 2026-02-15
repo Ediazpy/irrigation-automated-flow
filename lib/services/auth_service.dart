@@ -52,8 +52,16 @@ class AuthService {
       );
     }
 
-    // Check password
+    // Check if user is archived
     final user = _storage.users[email]!;
+    if (user.isArchived) {
+      return LoginResult(
+        success: false,
+        message: 'Account is deactivated. Contact your manager.',
+      );
+    }
+
+    // Check password
     if (user.password != password) {
       addFailedAttempt(email);
       final remaining = getRemainingAttempts(email);
