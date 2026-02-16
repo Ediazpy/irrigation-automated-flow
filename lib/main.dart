@@ -54,16 +54,20 @@ class _MyAppState extends State<MyApp> {
       await storage.loadData();
       print('Data loaded successfully');
 
+      print('Local users after loadData: ${storage.users.keys.toList()}');
+
       // Always sync from Firestore on startup when enabled,
       // so new users/data created on other devices are available
       if (storage.firestoreSyncEnabled) {
-        print('Syncing data from cloud...');
+        print('Firestore sync enabled, downloading cloud data...');
         final downloaded = await storage.downloadFromFirestore();
         if (downloaded) {
-          print('Cloud data synced successfully');
+          print('Cloud data synced. Users now: ${storage.users.keys.toList()}');
         } else {
-          print('No cloud data available or sync failed');
+          print('Cloud sync failed or no data available');
         }
+      } else {
+        print('Firestore sync is DISABLED');
       }
     } catch (e) {
       print('Error loading data (using defaults): $e');
