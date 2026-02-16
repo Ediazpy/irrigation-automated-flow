@@ -222,11 +222,9 @@ class QuoteService {
     return buffer.toString();
   }
 
-  /// Generate a shareable quote URL
-  /// In production, this would be a web URL. For now, we use a deep link format.
+  /// Generate a shareable quote URL hosted on Firebase
   static String generateQuoteUrl(String accessToken) {
-    // In production, replace with actual web URL
-    return 'irrigationflow://quote/$accessToken';
+    return 'https://irrigation-automated-flow.web.app/quote?token=$accessToken';
   }
 
   /// Check if quote is expired

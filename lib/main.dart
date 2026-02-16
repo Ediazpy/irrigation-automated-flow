@@ -9,6 +9,7 @@ import 'screens/login_screen.dart';
 import 'screens/setup_screen.dart';
 import 'screens/manager_home_screen.dart';
 import 'screens/technician_home_screen.dart';
+import 'screens/client/client_quote_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,20 +55,16 @@ class _MyAppState extends State<MyApp> {
       await storage.loadData();
       print('Data loaded successfully');
 
-      print('Local users after loadData: ${storage.users.keys.toList()}');
+      print('Local users loaded: ${storage.users.length}');
 
       // Always sync from Firestore on startup when enabled,
       // so new users/data created on other devices are available
       if (storage.firestoreSyncEnabled) {
-        print('Firestore sync enabled, downloading cloud data...');
+        print('Syncing from cloud...');
         final downloaded = await storage.downloadFromFirestore();
-        if (downloaded) {
-          print('Cloud data synced. Users now: ${storage.users.keys.toList()}');
-        } else {
-          print('Cloud sync failed or no data available');
-        }
-      } else {
-        print('Firestore sync is DISABLED');
+        print(downloaded
+            ? 'Cloud sync complete (${storage.users.length} users)'
+            : 'Cloud sync failed or no data');
       }
     } catch (e) {
       print('Error loading data (using defaults): $e');
@@ -120,6 +117,31 @@ class IrriTrackApp extends StatelessWidget {
 
   const IrriTrackApp({Key? key, required this.authService}) : super(key: key);
 
+  Widget _getHomeScreen(AuthService authService) {
+    // Check if web URL has a quote token (e.g. /quote?token=ABC)
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.path.contains('/quote') && uri.queryParameters.containsKey('token')) {
+        final token = uri.queryParameters['token']!;
+        return ClientQuoteScreen(
+          storage: authService.storage,
+          accessToken: token,
+        );
+      }
+    }
+
+    // Normal app flow
+    if (authService.storage.users.isEmpty) {
+      return SetupScreen(authService: authService);
+    }
+    if (authService.isLoggedIn) {
+      return authService.isManager
+          ? ManagerHomeScreen(authService: authService)
+          : TechnicianHomeScreen(authService: authService);
+    }
+    return LoginScreen(authService: authService);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -154,13 +176,22 @@ class IrriTrackApp extends StatelessWidget {
           fillColor: Colors.grey.shade50,
         ),
       ),
-      home: authService.storage.users.isEmpty
-          ? SetupScreen(authService: authService)
-          : authService.isLoggedIn
-              ? (authService.isManager
-                  ? ManagerHomeScreen(authService: authService)
-                  : TechnicianHomeScreen(authService: authService))
-              : LoginScreen(authService: authService),
+      onGenerateRoute: (settings) {
+        // Handle /quote?token=XYZ for customer quote approval (no login needed)
+        final uri = Uri.parse(settings.name ?? '');
+        if (uri.path == '/quote' && uri.queryParameters.containsKey('token')) {
+          final token = uri.queryParameters['token']!;
+          return MaterialPageRoute(
+            builder: (context) => ClientQuoteScreen(
+              storage: authService.storage,
+              accessToken: token,
+            ),
+          );
+        }
+        // Default route
+        return null;
+      },
+      home: _getHomeScreen(authService),
     );
   }
 }
