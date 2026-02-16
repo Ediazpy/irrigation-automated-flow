@@ -4,21 +4,7 @@ Commercial Irrigation Management System
 
 ## Live Web App
 
-**Access the app at:** https://ediazpy.github.io/irrigation-automated-flow/
-
-### Install on Your Device (PWA)
-
-**iPhone (Safari):**
-1. Open Safari and go to https://ediazpy.github.io/irrigation-automated-flow/
-2. Tap the Share button (square with arrow)
-3. Tap "Add to Home Screen"
-4. Name it "IAF App" and tap Add
-
-**Android (Chrome):**
-1. Open Chrome and go to https://ediazpy.github.io/irrigation-automated-flow/
-2. Tap the menu (3 dots)
-3. Tap "Add to Home screen"
-4. Name it "IAF App" and tap Add
+**Access the app at:**  https://irrigation-automated-flow.web.app
 
 ## Features
 
