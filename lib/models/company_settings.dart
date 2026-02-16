@@ -41,6 +41,7 @@ TERMS AND CONDITIONS
 7. LIABILITY: We are not responsible for pre-existing conditions or damage caused by factors outside our control.
 ''';
 
+  /// Full serialization for local storage (includes all fields)
   Map<String, dynamic> toJson() {
     return {
       'company_name': companyName,
@@ -53,6 +54,22 @@ TERMS AND CONDITIONS
       'default_footer_message': defaultFooterMessage,
       'photos_required': photosRequired,
       'master_reset_code': masterResetCode,
+    };
+  }
+
+  /// Firestore-safe serialization — excludes master_reset_code
+  /// (master reset code is sensitive and only needed locally)
+  Map<String, dynamic> toFirestoreJson() {
+    return {
+      'company_name': companyName,
+      'company_phone': companyPhone,
+      'company_email': companyEmail,
+      'company_address': companyAddress,
+      'logo_base64': logoBase64,
+      'default_terms_and_conditions': defaultTermsAndConditions,
+      'quote_expiration_days': quoteExpirationDays,
+      'default_footer_message': defaultFooterMessage,
+      'photos_required': photosRequired,
     };
   }
 

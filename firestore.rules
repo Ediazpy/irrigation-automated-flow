@@ -6,17 +6,21 @@ rules_version = '2';
 // Current auth model: App uses local auth (not Firebase Auth yet)
 // These rules validate data structure and allowed values to prevent
 // malformed writes. Reads are open since there's no Firebase Auth.
+// Sensitive data (security_answers, master_reset_code) is NOT uploaded.
 // TODO: When Firebase Auth is integrated, add request.auth checks.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ============ USERS ============
+    // Note: security_answers are excluded from Firestore uploads
     match /users/{email} {
       allow read: if true;
       allow write: if request.resource.data.keys().hasAll(['password', 'role', 'name'])
         && request.resource.data.role in ['manager', 'technician']
-        && request.resource.data.name is string;
+        && request.resource.data.name is string
+        && request.resource.data.password is string
+        && !request.resource.data.keys().hasAny(['security_answers']);
     }
 
     // ============ PROPERTIES ============
@@ -48,16 +52,19 @@ service cloud.firestore {
     }
 
     // ============ COMPANY SETTINGS ============
+    // Note: master_reset_code is excluded from Firestore uploads
     match /settings/{docId} {
       allow read: if true;
       allow write: if request.resource.data.keys().hasAll(['company_name'])
-        && request.resource.data.company_name is string;
+        && request.resource.data.company_name is string
+        && !request.resource.data.keys().hasAny(['master_reset_code']);
     }
 
     // ============ METADATA (ID counters) ============
     match /metadata/{docId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if request.resource.data.keys().hasAll(['next_property_id'])
+        && request.resource.data.next_property_id is int;
     }
 
     // ============ PASSWORD RESET REQUESTS ============

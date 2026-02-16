@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/company_settings.dart';
 import '../../models/user.dart';
+import '../../utils/password_hash.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   final AuthService authService;
@@ -39,7 +40,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         text: settings?.defaultFooterMessage ?? 'Thank you for your business!');
     _expirationDays = settings?.quoteExpirationDays ?? 30;
     _photosRequired = settings?.photosRequired ?? false;
-    _masterResetCodeController = TextEditingController(text: settings?.masterResetCode ?? '');
+    // Don't display the hashed master code — show empty field for re-entry
+    final existingCode = settings?.masterResetCode ?? '';
+    _masterResetCodeController = TextEditingController(
+      text: PasswordHash.isHashed(existingCode) ? '' : existingCode,
+    );
   }
 
   @override
@@ -57,6 +62,21 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   void _saveSettings() {
     if (!_formKey.currentState!.validate()) return;
 
+    // Hash the master reset code if it has been set/changed
+    final rawCode = _masterResetCodeController.text.trim();
+    final existingCode = widget.authService.storage.companySettings?.masterResetCode ?? '';
+    String hashedCode;
+    if (rawCode.isEmpty) {
+      // User left field empty — keep existing hashed code
+      hashedCode = existingCode;
+    } else if (PasswordHash.isHashed(rawCode)) {
+      // Already hashed (shouldn't normally happen)
+      hashedCode = rawCode;
+    } else {
+      // New plaintext code — hash it
+      hashedCode = PasswordHash.hashPassword(rawCode);
+    }
+
     final settings = CompanySettings(
       companyName: _nameController.text.trim(),
       companyPhone: _phoneController.text.trim(),
@@ -66,7 +86,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       quoteExpirationDays: _expirationDays,
       defaultFooterMessage: _footerController.text.trim(),
       photosRequired: _photosRequired,
-      masterResetCode: _masterResetCodeController.text.trim(),
+      masterResetCode: hashedCode,
     );
 
     widget.authService.storage.companySettings = settings;
@@ -276,11 +296,14 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _masterResetCodeController,
-              decoration: const InputDecoration(
+              obscureText: true,
+              decoration: InputDecoration(
                 labelText: 'Master Reset Code',
-                prefixIcon: Icon(Icons.vpn_key),
-                hintText: 'Enter a secure code (e.g. 6+ characters)',
-                helperText: 'Used for emergency admin password recovery',
+                prefixIcon: const Icon(Icons.vpn_key),
+                hintText: PasswordHash.isHashed(widget.authService.storage.companySettings?.masterResetCode ?? '')
+                    ? 'Code is set (enter new code to change)'
+                    : 'Enter a secure code (e.g. 6+ characters)',
+                helperText: 'Stored securely as a hash. Leave blank to keep existing code.',
               ),
             ),
 
@@ -428,12 +451,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                // Validate at least 3 questions answered
+                // Validate at least 3 questions answered, hash answers
                 final answers = <String, String>{};
                 for (var id in selectedQuestions) {
                   final answer = controllers[id]!.text.trim();
                   if (answer.isNotEmpty) {
-                    answers[id] = answer;
+                    // Hash the answer (lowercase for case-insensitive comparison)
+                    answers[id] = PasswordHash.hashPassword(answer.toLowerCase());
                   }
                 }
 

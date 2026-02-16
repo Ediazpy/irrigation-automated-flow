@@ -5,6 +5,7 @@ import '../models/inspection.dart';
 import '../models/quote.dart';
 import '../models/repair_task.dart';
 import '../models/company_settings.dart';
+import '../utils/password_hash.dart';
 
 /// Service for syncing data with Firebase Firestore
 /// Works alongside StorageService for cloud backup and multi-device sync
@@ -32,7 +33,7 @@ class FirestoreService {
     await _firestore
         .collection(_usersCollection)
         .doc(email)
-        .set(user.toJson());
+        .set(user.toFirestoreJson()); // Excludes security_answers
   }
 
   Future<void> deleteUser(String email) async {
@@ -200,7 +201,7 @@ class FirestoreService {
     await _firestore
         .collection(_settingsCollection)
         .doc('company')
-        .set(settings.toJson());
+        .set(settings.toFirestoreJson()); // Excludes master_reset_code
   }
 
   Future<CompanySettings?> getCompanySettings() async {
@@ -276,10 +277,10 @@ class FirestoreService {
   }) async {
     final batch = _firestore.batch();
 
-    // Users
+    // Users (Firestore-safe: excludes security_answers)
     for (var entry in users.entries) {
       final ref = _firestore.collection(_usersCollection).doc(entry.key);
-      batch.set(ref, entry.value.toJson());
+      batch.set(ref, entry.value.toFirestoreJson());
     }
 
     // Properties
@@ -306,10 +307,10 @@ class FirestoreService {
       batch.set(ref, entry.value.toJson());
     }
 
-    // Company Settings
+    // Company Settings (Firestore-safe: excludes master_reset_code)
     if (companySettings != null) {
       final ref = _firestore.collection(_settingsCollection).doc('company');
-      batch.set(ref, companySettings.toJson());
+      batch.set(ref, companySettings.toFirestoreJson());
     }
 
     // Metadata
@@ -333,7 +334,6 @@ class FirestoreService {
       'name': name,
       'status': 'pending', // pending, approved, denied
       'requested_at': FieldValue.serverTimestamp(),
-      'new_password': '', // Dev fills this in when approving
     });
   }
 
@@ -361,10 +361,11 @@ class FirestoreService {
   }
 
   /// Approve a reset request with a new temporary password (dev/admin tool)
+  /// The password is stored as a hash in Firestore
   Future<void> approveResetRequest(String email, String newPassword) async {
     await _firestore.collection(_resetRequestsCollection).doc(email).update({
       'status': 'approved',
-      'new_password': newPassword,
+      'new_password': PasswordHash.hashPassword(newPassword),
       'approved_at': FieldValue.serverTimestamp(),
     });
   }

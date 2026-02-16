@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import '../models/company_settings.dart';
+import '../utils/password_hash.dart';
 import 'manager_home_screen.dart';
 import 'manager/company_settings_screen.dart';
 
@@ -45,12 +46,12 @@ class _SetupScreenState extends State<SetupScreen> {
       _isLoading = true;
     });
 
-    // Create the admin user
+    // Create the admin user with hashed password
     final email = _emailController.text.trim().toLowerCase();
     final adminUser = User(
       email: email,
       name: _nameController.text.trim(),
-      password: _passwordController.text,
+      password: PasswordHash.hashPassword(_passwordController.text),
       role: 'manager',
     );
 

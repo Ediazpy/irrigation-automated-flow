@@ -20,6 +20,9 @@ dependencies:
   # Date formatting
   intl: ^0.19.0
 
+  # Password hashing
+  crypto: ^3.0.3
+
   # URL launching (for email/SMS links)
   url_launcher: ^6.2.1
 

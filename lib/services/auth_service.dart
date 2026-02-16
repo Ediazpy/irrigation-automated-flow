@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import '../utils/password_hash.dart';
 import 'storage_service.dart';
 
 class AuthService {
@@ -61,8 +62,8 @@ class AuthService {
       );
     }
 
-    // Check password
-    if (user.password != password) {
+    // Check password (supports both hashed and legacy plaintext)
+    if (!PasswordHash.verifyPassword(password, user.password)) {
       addFailedAttempt(email);
       final remaining = getRemainingAttempts(email);
       return LoginResult(
@@ -73,12 +74,24 @@ class AuthService {
 
     // Login successful
     resetFailedAttempts(email);
-    currentUser = user;
+
+    // Migration: if password was stored in plaintext, hash it now
+    if (!PasswordHash.isHashed(user.password)) {
+      final hashedUser = user.copyWith(
+        password: PasswordHash.hashPassword(password),
+      );
+      _storage.users[email] = hashedUser;
+      _storage.saveData();
+      currentUser = hashedUser;
+    } else {
+      currentUser = user;
+    }
+
     await saveSession(email);
     return LoginResult(
       success: true,
-      message: 'Welcome, ${user.name}!',
-      user: user,
+      message: 'Welcome, ${currentUser!.name}!',
+      user: currentUser,
     );
   }
 

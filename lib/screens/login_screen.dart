@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user.dart';
+import '../utils/password_hash.dart';
 import 'manager_home_screen.dart';
 import 'technician_home_screen.dart';
 
@@ -254,7 +255,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 return;
               }
 
-              if (enteredCode == masterCode) {
+              // Compare using hash verification (supports both hashed and legacy plaintext codes)
+              if (PasswordHash.verifyPassword(enteredCode, masterCode)) {
                 Navigator.pop(context);
                 _showNewPasswordDialog(user);
               } else {
@@ -334,9 +336,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (status == 'approved') {
         final newPassword = request['new_password'] ?? '';
         if (newPassword.isNotEmpty) {
-          // Apply the approved password reset
+          // Apply the approved password reset (hash the new password)
           final storage = widget.authService.storage;
-          storage.users[user.email] = user.copyWith(password: newPassword);
+          final hashedPassword = PasswordHash.isHashed(newPassword)
+              ? newPassword
+              : PasswordHash.hashPassword(newPassword);
+          storage.users[user.email] = user.copyWith(password: hashedPassword);
           storage.failedAttempts.remove(user.email);
           await storage.saveData();
 
@@ -429,12 +434,13 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // Verify answers (case insensitive)
+              // Verify answers (supports both hashed and legacy plaintext answers)
               bool allCorrect = true;
               for (var id in selectedIds) {
                 final userAnswer = answerControllers[id]!.text.trim().toLowerCase();
-                final correctAnswer = user.securityAnswers[id]?.toLowerCase() ?? '';
-                if (userAnswer != correctAnswer) {
+                final storedAnswer = user.securityAnswers[id] ?? '';
+                // Use hash verification which handles both hashed and plaintext
+                if (!PasswordHash.verifyPassword(userAnswer, storedAnswer)) {
                   allCorrect = false;
                   break;
                 }
@@ -520,9 +526,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 return;
               }
 
-              // Update password and clear failed attempts
+              // Update password (hashed) and clear failed attempts
               final storage = widget.authService.storage;
-              storage.users[user.email] = user.copyWith(password: newPassword);
+              storage.users[user.email] = user.copyWith(
+                password: PasswordHash.hashPassword(newPassword),
+              );
               storage.failedAttempts.remove(user.email);
               storage.saveData();
 
@@ -678,7 +686,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'v2.1',
+                    'v2.2',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
                   ),

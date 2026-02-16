@@ -27,6 +27,7 @@ class User {
     {'id': 'friend', 'question': "What was your childhood best friend's name?"},
   ];
 
+  /// Full serialization for local storage (includes all fields)
   Map<String, dynamic> toJson() {
     return {
       'password': password,
@@ -34,6 +35,17 @@ class User {
       'name': name,
       'is_archived': isArchived,
       'security_answers': securityAnswers,
+    };
+  }
+
+  /// Firestore-safe serialization — excludes security_answers
+  /// (security answers are sensitive and only needed locally)
+  Map<String, dynamic> toFirestoreJson() {
+    return {
+      'password': password,
+      'role': role,
+      'name': name,
+      'is_archived': isArchived,
     };
   }
 

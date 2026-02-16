@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/user.dart';
+import '../../utils/password_hash.dart';
 
 class UsersScreen extends StatefulWidget {
   final AuthService authService;
@@ -215,7 +216,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
               setState(() {
                 widget.authService.storage.users[email] = user.copyWith(
-                  password: newPassword,
+                  password: PasswordHash.hashPassword(newPassword),
                 );
                 // Also unlock the account when resetting password
                 widget.authService.resetFailedAttempts(email);
@@ -468,7 +469,7 @@ class _UsersScreenState extends State<UsersScreen> {
                     email: email,
                     name: name,
                     role: role,
-                    password: password,
+                    password: PasswordHash.hashPassword(password),
                   );
                 });
                 widget.authService.storage.saveData();
