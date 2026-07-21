@@ -48,7 +48,7 @@ class _AssignInspectionScreenState extends State<AssignInspectionScreen> {
     final storage = widget.authService.storage;
     final properties = storage.properties.values.toList();
     final technicians = storage.users.entries
-        .where((e) => e.value.role == 'technician' && !e.value.isArchived)
+        .where((e) => !e.value.isArchived)
         .toList();
 
     final currentBillingMonth = _getBillingMonth(selectedDate ?? DateTime.now());
@@ -156,11 +156,11 @@ class _AssignInspectionScreenState extends State<AssignInspectionScreen> {
 
             const SizedBox(height: 24),
 
-            // Technician Selection (Multi-select)
-            const Text('Select Technician(s)', style: TextStyle(fontWeight: FontWeight.bold)),
+            // Team Member Selection (Multi-select)
+            const Text('Assign To', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             const Text(
-              'Select one or more technicians for this walk',
+              'Select one or more team members for this walk',
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
             const SizedBox(height: 8),
@@ -173,7 +173,7 @@ class _AssignInspectionScreenState extends State<AssignInspectionScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'No technicians available. Create technician accounts first.',
+                  'No team members available. Create user accounts first.',
                   style: TextStyle(color: Colors.grey),
                 ),
               )
@@ -188,7 +188,10 @@ class _AssignInspectionScreenState extends State<AssignInspectionScreen> {
                     final isSelected = selectedTechnicians.contains(t.key);
                     return CheckboxListTile(
                       title: Text(t.value.name),
-                      subtitle: Text(t.key, style: const TextStyle(fontSize: 12)),
+                      subtitle: Text(
+                        '${t.key} • ${t.value.role == 'manager' ? 'Manager' : 'Technician'}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
                       value: isSelected,
                       onChanged: (checked) {
                         setState(() {

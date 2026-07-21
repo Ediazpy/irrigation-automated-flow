@@ -371,10 +371,12 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
               );
               storage.saveData();
 
+              // Capture messenger before popping — context is invalid after two pops
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(context);
               Navigator.pop(context);
 
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Inspection submitted for review!'),
                   backgroundColor: Colors.green,

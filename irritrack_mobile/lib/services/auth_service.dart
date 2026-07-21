@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart';
 import 'storage_service.dart';
 import 'revenuecat_service.dart';
@@ -36,14 +38,6 @@ class AuthService {
   }
 
   Future<LoginResult> login(String email, String password) async {
-    // Check if account is locked
-    if (isAccountLocked(email)) {
-      return LoginResult(
-        success: false,
-        message: 'Account locked. Please contact your manager to reset.',
-      );
-    }
-
     // Check if email exists
     if (!_storage.users.containsKey(email)) {
       addFailedAttempt(email);
@@ -54,32 +48,53 @@ class AuthService {
       );
     }
 
-    // Check password
     final user = _storage.users[email]!;
-    if (user.password != password) {
+
+    // Check local password first
+    if (user.password == password) {
+      resetFailedAttempts(email);
+      currentUser = user;
+      await saveSession(email);
+      if (!kIsWeb) await RevenueCatService.login(email);
+      return LoginResult(success: true, message: 'Welcome, ${user.name}!', user: user);
+    }
+
+    // Local password didn't match — try Firebase Auth regardless of lock status.
+    // A successful Firebase Auth proves identity and clears the lock.
+    try {
+      await fb.FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      // Firebase Auth succeeded — sync new password and unlock
+      resetFailedAttempts(email);
+      _storage.users[email] = user.copyWith(password: password);
+      _storage.saveData();
+      currentUser = _storage.users[email];
+      await saveSession(email);
+      if (!kIsWeb) await RevenueCatService.login(email);
+      return LoginResult(
+        success: true,
+        message: 'Welcome, ${user.name}!',
+        user: currentUser,
+      );
+    } catch (_) {
+      // Both local and Firebase Auth failed
+      if (isAccountLocked(email)) {
+        return LoginResult(
+          success: false,
+          message: 'Account locked. Use "Forgot Password?" to reset via email.',
+        );
+      }
       addFailedAttempt(email);
       final remaining = getRemainingAttempts(email);
       return LoginResult(
         success: false,
-        message: 'Incorrect password. Attempts remaining: $remaining',
+        message: remaining <= 0
+            ? 'Account locked. Use "Forgot Password?" to reset via email.'
+            : 'Incorrect password. Attempts remaining: $remaining',
       );
     }
-
-    // Login successful
-    resetFailedAttempts(email);
-    currentUser = user;
-    await saveSession(email);
-
-    // Sync with RevenueCat for subscription status (mobile only)
-    if (!kIsWeb) {
-      await RevenueCatService.login(email);
-    }
-
-    return LoginResult(
-      success: true,
-      message: 'Welcome, ${user.name}!',
-      user: user,
-    );
   }
 
   Future<void> logout() async {
@@ -115,6 +130,61 @@ class AuthService {
   bool get isLoggedIn => currentUser != null;
   bool get isManager => currentUser?.role == 'manager';
   bool get isTechnician => currentUser?.role == 'technician';
+
+  /// Sends a Firebase password reset email. Returns null on success, error message on failure.
+  Future<String?> sendPasswordResetEmail(String email) async {
+    // Look up user — local cache first, then Firestore (handles fresh web loads)
+    User? user = _storage.users[email];
+    if (user == null) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(email)
+            .get();
+        if (!doc.exists || doc.data() == null) {
+          return 'No account found with that email.';
+        }
+        user = User.fromJson(email, doc.data()!);
+      } catch (_) {
+        return 'No account found with that email.';
+      }
+    }
+
+    try {
+      // Ensure user exists in Firebase Auth before sending reset email.
+      // Use a placeholder if the stored password is unusable (e.g. a legacy hash).
+      final initialPassword = user.password.length >= 6
+          ? user.password
+          : 'irritrack_placeholder_pw';
+      try {
+        await fb.FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: initialPassword,
+        );
+      } on fb.FirebaseAuthException catch (e) {
+        if (e.code != 'email-already-in-use') rethrow;
+      }
+      await fb.FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      return null;
+    } on fb.FirebaseAuthException catch (e) {
+      print('FirebaseAuth error during password reset: ${e.code} — ${e.message}');
+      switch (e.code) {
+        case 'operation-not-allowed':
+          return 'Email sign-in is not enabled. Contact your admin.';
+        case 'user-not-found':
+          return 'No account found with that email.';
+        case 'invalid-email':
+          return 'Invalid email address.';
+        case 'too-many-requests':
+          return 'Too many attempts. Please wait a few minutes and try again.';
+        default:
+          return 'Reset failed (${e.code}). Please try again.';
+      }
+    } catch (e) {
+      print('Unexpected error during password reset: $e');
+      return 'Failed to send reset email. Please try again.';
+    }
+  }
 }
 
 class LoginResult {

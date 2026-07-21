@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/repair_task.dart';
 import '../../constants/status_constants.dart';
+import '../../utils/map_launcher.dart';
 import 'do_repair_task_screen.dart';
 
 /// Technician view of repair tasks
@@ -209,6 +210,8 @@ class _RepairTasksScreenState extends State<RepairTasksScreen> {
                       ),
                     ),
                   ),
+                  if (property != null && property.address.isNotEmpty)
+                    OpenInMapsButton(address: property.address),
                 ],
               ),
               const SizedBox(height: 8),

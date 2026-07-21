@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../models/user.dart';
-import '../models/company_settings.dart';
-import '../utils/password_hash.dart';
 import 'manager_home_screen.dart';
 import 'manager/company_settings_screen.dart';
+import 'login_screen.dart';
 
 class SetupScreen extends StatefulWidget {
   final AuthService authService;
@@ -46,36 +44,28 @@ class _SetupScreenState extends State<SetupScreen> {
       _isLoading = true;
     });
 
-    // Create the admin user with hashed password
-    final email = _emailController.text.trim().toLowerCase();
-    final adminUser = User(
-      email: email,
+    // Firebase Auth account + server-assigned manager role and companyId.
+    // A Cloud Function creates the profile and company documents — the
+    // client never writes its own role.
+    final result = await widget.authService.registerCompany(
+      companyName: _companyController.text.trim(),
       name: _nameController.text.trim(),
-      password: PasswordHash.hashPassword(_passwordController.text),
-      role: 'manager',
+      email: _emailController.text.trim().toLowerCase(),
+      password: _passwordController.text,
     );
 
-    // Save to storage
-    final storage = widget.authService.storage;
-    storage.users[email] = adminUser;
-
-    // Save company settings with the company name from setup
-    final companyName = _companyController.text.trim();
-    if (storage.companySettings == null) {
-      storage.companySettings = CompanySettings(companyName: companyName);
-    }
-
-    storage.saveData();
-
-    // Log in the admin and persist session
-    widget.authService.currentUser = adminUser;
-    await widget.authService.saveSession(email);
+    if (!mounted) return;
 
     setState(() {
       _isLoading = false;
     });
 
-    if (!mounted) return;
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     // Navigate to manager home, then immediately open settings to complete profile
     Navigator.of(context).pushReplacement(
@@ -95,6 +85,9 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Account'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -103,7 +96,7 @@ class _SetupScreenState extends State<SetupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 20),
 
                 // Logo and welcome
                 Container(
@@ -144,7 +137,7 @@ class _SetupScreenState extends State<SetupScreen> {
                         color: Colors.grey,
                       ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
 
                 // Stepper
                 Stepper(
@@ -337,18 +330,18 @@ class _SetupScreenState extends State<SetupScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.teal.shade50,
+                              color: const Color(0xFFE8F0F0),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.info_outline, color: Colors.teal.shade700),
+                                const Icon(Icons.info_outline, color: Color(0xFF0EA5E9)),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     'This will be your admin account. You can add technicians and managers after setup.',
                                     style: TextStyle(
-                                      color: Colors.teal.shade700,
+                                      color: Colors.grey.shade700,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -361,6 +354,39 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
+
+                // Already have an account?
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Already have an account? ',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => LoginScreen(authService: widget.authService),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        'Sign in',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

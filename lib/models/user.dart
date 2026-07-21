@@ -1,91 +1,82 @@
 class User {
+  final String uid;
   final String email;
-  final String password;
   final String role; // 'manager' or 'technician'
   final String name;
   final bool isArchived;
-  // Security questions for password reset (manager only)
-  final Map<String, String> securityAnswers; // questionId -> answer
+  final String companyId;
 
   User({
+    required this.uid,
     required this.email,
-    required this.password,
     required this.role,
     required this.name,
     this.isArchived = false,
-    this.securityAnswers = const {},
+    this.companyId = '',
   });
 
-  // Available security questions
-  static const List<Map<String, String>> securityQuestions = [
-    {'id': 'pet', 'question': 'What was the name of your first pet?'},
-    {'id': 'city', 'question': 'What city did you grow up in?'},
-    {'id': 'school', 'question': 'What was the name of your elementary school?'},
-    {'id': 'car', 'question': 'What was your first car make and model?'},
-    {'id': 'mother', 'question': "What is your mother's maiden name?"},
-    {'id': 'street', 'question': 'What street did you live on as a child?'},
-    {'id': 'friend', 'question': "What was your childhood best friend's name?"},
-  ];
-
-  /// Full serialization for local storage (includes all fields)
+  /// Serialization for local cache. Credentials live in Firebase Auth —
+  /// this is profile data only.
   Map<String, dynamic> toJson() {
     return {
-      'password': password,
+      'uid': uid,
+      'email': email,
       'role': role,
       'name': name,
       'is_archived': isArchived,
-      'security_answers': securityAnswers,
+      'company_id': companyId,
     };
   }
 
-  /// Firestore-safe serialization — excludes security_answers
-  /// (security answers are sensitive and only needed locally)
+  /// Firestore profile document (doc ID is the Firebase Auth uid).
   Map<String, dynamic> toFirestoreJson() {
     return {
-      'password': password,
+      'email': email,
       'role': role,
       'name': name,
       'is_archived': isArchived,
+      'company_id': companyId,
     };
   }
 
-  factory User.fromJson(String email, Map<String, dynamic> json) {
-    Map<String, String> answers = {};
-    if (json['security_answers'] != null) {
-      (json['security_answers'] as Map<String, dynamic>).forEach((key, value) {
-        answers[key] = value.toString();
-      });
-    }
-
+  factory User.fromJson(String key, Map<String, dynamic> json) {
     return User(
-      email: email,
-      password: json['password'] ?? '',
+      uid: json['uid'] ?? '',
+      email: json['email'] ?? key,
       role: json['role'] ?? 'technician',
       name: json['name'] ?? '',
       isArchived: json['is_archived'] ?? false,
-      securityAnswers: answers,
+      companyId: json['company_id'] ?? '',
+    );
+  }
+
+  /// From a Firestore users/{uid} document.
+  factory User.fromFirestore(String uid, Map<String, dynamic> json) {
+    return User(
+      uid: uid,
+      email: json['email'] ?? '',
+      role: json['role'] ?? 'technician',
+      name: json['name'] ?? '',
+      isArchived: json['is_archived'] ?? false,
+      companyId: json['company_id'] ?? '',
     );
   }
 
   User copyWith({
+    String? uid,
     String? email,
-    String? password,
     String? role,
     String? name,
     bool? isArchived,
-    Map<String, String>? securityAnswers,
+    String? companyId,
   }) {
     return User(
+      uid: uid ?? this.uid,
       email: email ?? this.email,
-      password: password ?? this.password,
       role: role ?? this.role,
       name: name ?? this.name,
       isArchived: isArchived ?? this.isArchived,
-      securityAnswers: securityAnswers ?? this.securityAnswers,
+      companyId: companyId ?? this.companyId,
     );
-  }
-
-  bool hasSecurityQuestions() {
-    return securityAnswers.isNotEmpty && securityAnswers.length >= 3;
   }
 }

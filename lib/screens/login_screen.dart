@@ -1,11 +1,10 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
-import '../services/firestore_service.dart';
-import '../models/user.dart';
-import '../utils/password_hash.dart';
+import '../constants/app_version.dart';
 import 'manager_home_screen.dart';
 import 'technician_home_screen.dart';
+import 'setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final AuthService authService;
@@ -17,11 +16,37 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const String _savedEmailKey = 'iaf_saved_email';
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _rememberEmail = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedEmail();
+  }
+
+  Future<void> _loadSavedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_savedEmailKey);
+    if (saved != null && saved.isNotEmpty && mounted) {
+      setState(() => _emailController.text = saved);
+    }
+  }
+
+  Future<void> _persistEmailChoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberEmail) {
+      await prefs.setString(_savedEmailKey, _emailController.text.trim().toLowerCase());
+    } else {
+      await prefs.remove(_savedEmailKey);
+    }
+  }
 
   @override
   void dispose() {
@@ -44,13 +69,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordController.text,
     );
 
+    if (!mounted) return;
+
     setState(() {
       _isLoading = false;
     });
 
-    if (!mounted) return;
-
     if (result.success) {
+      await _persistEmailChoice();
+      if (!mounted) return;
       // Navigate to appropriate home screen
       if (widget.authService.isManager) {
         Navigator.of(context).pushReplacement(
@@ -66,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } else {
-      // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.message),
@@ -77,17 +103,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showForgotPasswordDialog() {
-    final emailController = TextEditingController();
+    final emailController =
+        TextEditingController(text: _emailController.text.trim().toLowerCase());
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Forgot Password'),
+        title: const Text('Reset Password'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enter your email to reset your password:'),
+            const Text(
+              'Enter your email and we\'ll send you a link to reset your password:',
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: emailController,
@@ -107,595 +136,314 @@ class _LoginScreenState extends State<LoginScreen> {
           ElevatedButton(
             onPressed: () {
               final email = emailController.text.trim().toLowerCase();
+              if (email.isEmpty || !email.contains('@')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid email'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
               Navigator.pop(context);
-              _attemptPasswordReset(email);
+              _sendPasswordReset(email);
             },
-            child: const Text('Continue'),
+            child: const Text('Send Reset Email'),
           ),
         ],
       ),
     );
   }
 
-  void _attemptPasswordReset(String email) {
-    final user = widget.authService.storage.users[email];
-
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email not found'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Technicians must contact manager
-    if (user.role != 'manager') {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Contact Manager'),
-          content: const Text(
-            'Technicians must contact their manager to reset their password.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    // Manager must have security questions set up
-    if (!user.hasSecurityQuestions()) {
-      _showAlternateResetOptions(user);
-      return;
-    }
-
-    // Show security question challenge
-    _showSecurityQuestionChallenge(user);
-  }
-
-  void _showAlternateResetOptions(User user) {
-    final hasMasterCode = widget.authService.storage.companySettings?.masterResetCode.isNotEmpty == true;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Password Recovery'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Security questions have not been set up. Choose a recovery option:',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            if (hasMasterCode)
-              ListTile(
-                leading: const Icon(Icons.vpn_key, color: Colors.teal),
-                title: const Text('Use Master Reset Code'),
-                subtitle: const Text('Enter the code provided by your admin/dev team'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showMasterCodeDialog(user);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.send, color: Colors.orange),
-              title: const Text('Request Reset from Dev Team'),
-              subtitle: const Text('Send a reset request via cloud'),
-              onTap: () {
-                Navigator.pop(context);
-                _submitResetRequest(user);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.refresh, color: Colors.blue),
-              title: const Text('Check Reset Status'),
-              subtitle: const Text('Check if your reset request was approved'),
-              onTap: () {
-                Navigator.pop(context);
-                _checkResetRequestStatus(user);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showMasterCodeDialog(User user) {
-    final codeController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Master Reset Code'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter the master reset code to reset your password:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: codeController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Master Code',
-                prefixIcon: Icon(Icons.vpn_key),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final enteredCode = codeController.text.trim();
-              final masterCode = widget.authService.storage.companySettings?.masterResetCode ?? '';
-
-              if (enteredCode.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter the master code'), backgroundColor: Colors.red),
-                );
-                return;
-              }
-
-              // Compare using hash verification (supports both hashed and legacy plaintext codes)
-              if (PasswordHash.verifyPassword(enteredCode, masterCode)) {
-                Navigator.pop(context);
-                _showNewPasswordDialog(user);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid master code'), backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('Verify'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _submitResetRequest(User user) async {
+  Future<void> _sendPasswordReset(String email) async {
     try {
-      final firestoreService = FirestoreService();
-      await firestoreService.submitResetRequest(user.email, user.name);
-
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Request Sent'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your password reset request has been sent to the dev team.',
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Email: ${user.email}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Once approved, come back and tap "Forgot Password" > "Check Reset Status" to set your new password.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send request: $e'), backgroundColor: Colors.red),
-      );
+      await widget.authService.sendPasswordReset(email);
+    } catch (_) {
+      // Deliberately ignore errors — do not reveal whether the email exists.
     }
-  }
-
-  void _checkResetRequestStatus(User user) async {
-    try {
-      final firestoreService = FirestoreService();
-      final request = await firestoreService.checkResetRequest(user.email);
-
-      if (!mounted) return;
-
-      if (request == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No reset request found. Submit one first.'), backgroundColor: Colors.orange),
-        );
-        return;
-      }
-
-      final status = request['status'] ?? 'pending';
-
-      if (status == 'approved') {
-        final newPassword = request['new_password'] ?? '';
-        if (newPassword.isNotEmpty) {
-          // Apply the approved password reset (hash the new password)
-          final storage = widget.authService.storage;
-          final hashedPassword = PasswordHash.isHashed(newPassword)
-              ? newPassword
-              : PasswordHash.hashPassword(newPassword);
-          storage.users[user.email] = user.copyWith(password: hashedPassword);
-          storage.failedAttempts.remove(user.email);
-          await storage.saveData();
-
-          // Clean up the request
-          await firestoreService.deleteResetRequest(user.email);
-
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Password Reset!'),
-              content: const Text(
-                'Your password has been reset by the dev team. You can now log in with the temporary password they provided. Please change it after logging in.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-      } else if (status == 'denied') {
-        await firestoreService.deleteResetRequest(user.email);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your reset request was denied. Contact the dev team directly.'), backgroundColor: Colors.red),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Your request is still pending. Please wait for the dev team to approve it.'), backgroundColor: Colors.orange),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error checking status: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  void _showSecurityQuestionChallenge(User user) {
-    // Pick 3 random questions from the ones the user answered
-    final answeredIds = user.securityAnswers.keys.toList();
-    answeredIds.shuffle(Random());
-    final selectedIds = answeredIds.take(3).toList();
-
-    final answerControllers = <String, TextEditingController>{};
-    for (var id in selectedIds) {
-      answerControllers[id] = TextEditingController();
-    }
-
+    if (!mounted) return;
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Security Questions'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Answer the following security questions to reset your password:',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              ...selectedIds.map((id) {
-                final question = User.securityQuestions
-                    .firstWhere((q) => q['id'] == id, orElse: () => {'question': 'Unknown'})['question']!;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: TextField(
-                    controller: answerControllers[id],
-                    decoration: InputDecoration(
-                      labelText: question,
-                      isDense: true,
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
+        title: const Text('Check Your Email'),
+        content: Text(
+          'If an account exists for $email, a password reset link has been sent. '
+          'Follow the link in the email to choose a new password.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // Verify answers (supports both hashed and legacy plaintext answers)
-              bool allCorrect = true;
-              for (var id in selectedIds) {
-                final userAnswer = answerControllers[id]!.text.trim().toLowerCase();
-                final storedAnswer = user.securityAnswers[id] ?? '';
-                // Use hash verification which handles both hashed and plaintext
-                if (!PasswordHash.verifyPassword(userAnswer, storedAnswer)) {
-                  allCorrect = false;
-                  break;
-                }
-              }
-
-              if (allCorrect) {
-                Navigator.pop(context);
-                _showNewPasswordDialog(user);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('One or more answers are incorrect'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            child: const Text('Verify'),
+            child: const Text('OK'),
           ),
         ],
       ),
-    );
-  }
-
-  void _showNewPasswordDialog(User user) {
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Set New Password'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: newPasswordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'New Password',
-                prefixIcon: Icon(Icons.lock),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: confirmPasswordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Confirm Password',
-                prefixIcon: Icon(Icons.lock_outline),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newPassword = newPasswordController.text;
-              final confirmPassword = confirmPasswordController.text;
-
-              if (newPassword.length < 4) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Password must be at least 4 characters'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (newPassword != confirmPassword) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Passwords do not match'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              // Update password (hashed) and clear failed attempts
-              final storage = widget.authService.storage;
-              storage.users[user.email] = user.copyWith(
-                password: PasswordHash.hashPassword(newPassword),
-              );
-              storage.failedAttempts.remove(user.email);
-              storage.saveData();
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Password reset successfully! Please login.'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Reset Password'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogo(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'IAF',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-              ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Irrigation Automated Flow',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w300,
-                letterSpacing: 1,
-                color: Colors.grey.shade600,
-              ),
-        ),
-      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Logo
-                  _buildLogo(context),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Commercial Irrigation Management',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey,
-                        ),
-                  ),
-                  const SizedBox(height: 48),
-
-                  // Email Field
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: const Icon(Icons.email),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Please enter a valid email';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password Field
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Forgot Password Button
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _showForgotPasswordDialog,
-                      child: const Text('Forgot Password?'),
+      backgroundColor: const Color(0xFFF4F7F9),
+      body: Column(
+        children: [
+          // ── Gradient Hero Header ────────────────────────────────────────
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 56, 24, 36),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Glassy icon circle
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  child: const Icon(
+                    Icons.water_drop,
+                    color: Colors.white,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 18),
 
-                  // Login Button
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Login',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                // IAF brand name — large, spaced
+                const Text(
+                  'IAF',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 38,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 6,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Irrigation Automated Flow',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Login Form ──────────────────────────────────────────────────
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Section heading
+                        const Text(
+                          'Welcome back',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A2332),
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Sign in to your account to continue',
+                          style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Email Field
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email address',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your email';
+                            }
+                            if (!value.contains('@')) {
+                              return 'Please enter a valid email';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Password Field
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          onFieldSubmitted: (_) => _isLoading ? null : _login(),
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                              onPressed: () =>
+                                  setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your password';
+                            }
+                            return null;
+                          },
+                        ),
+
+                        // Remember email + Forgot Password on one row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => setState(
+                                    () => _rememberEmail = !_rememberEmail),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: Checkbox(
+                                        value: _rememberEmail,
+                                        onChanged: (v) => setState(
+                                            () => _rememberEmail = v ?? true),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Remember email',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _showForgotPasswordDialog,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 8),
+                              ),
+                              child: const Text('Forgot Password?'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+
+                        // Sign In button
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _login,
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                        fontSize: 16, fontWeight: FontWeight.w600),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Divider row
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade400,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // New Company
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'New company?',
+                              style: TextStyle(
+                                  fontSize: 14, color: Color(0xFF64748B)),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      SetupScreen(authService: widget.authService),
+                                ),
+                              ),
+                              child: const Text('Create Account'),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 4),
+                        Text(
+                          appVersion,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFFCBD5E1),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'v2.2',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-          ),
-        ),
+        ],
       ),
     );
   }

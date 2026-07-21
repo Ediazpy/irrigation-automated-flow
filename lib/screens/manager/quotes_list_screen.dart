@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
 import '../../services/quote_service.dart';
 import '../../models/quote.dart';
 import '../../models/property.dart';
@@ -20,15 +22,56 @@ class _QuotesListScreenState extends State<QuotesListScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _searchQuery = '';
+  StreamSubscription<Map<int, Quote>>? _quotesSubscription;
+  Timer? _reconcileTimer;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _subscribeToQuotes();
+    // Customer approvals land in public_quotes — pull them into the quotes
+    // collection now and every 30s while this screen is open, so approvals
+    // show up without restarting the app.
+    _reconcileApprovals();
+    _reconcileTimer = Timer.periodic(
+        const Duration(seconds: 30), (_) => _reconcileApprovals());
+  }
+
+  Future<void> _reconcileApprovals() async {
+    try {
+      final changed = await FirestoreService()
+          .reconcilePublicQuotes(widget.authService.storage.quotes);
+      if (changed.isNotEmpty && mounted) {
+        widget.authService.storage.saveData();
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  /// Listen to Firestore in real-time so the manager sees customer approvals
+  /// the moment they happen — even on another device/browser.
+  void _subscribeToQuotes() {
+    if (!widget.authService.storage.firestoreSyncEnabled) return;
+    _quotesSubscription = FirestoreService().watchQuotes().listen(
+      (firestoreQuotes) {
+        if (!mounted) return;
+        // Merge Firestore quotes into local storage
+        widget.authService.storage.quotes
+          ..clear()
+          ..addAll(firestoreQuotes);
+        setState(() {});
+      },
+      onError: (_) {
+        // Network unavailable — silently keep local data
+      },
+    );
   }
 
   @override
   void dispose() {
+    _reconcileTimer?.cancel();
+    _quotesSubscription?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -72,7 +115,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
             Tab(text: 'Sent'),
             Tab(text: 'Approved'),
             Tab(text: 'Rejected'),
-            Tab(text: 'Expired'),
           ],
         ),
       ),
@@ -103,7 +145,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                 _buildQuoteList(QuoteStatus.sent),
                 _buildQuoteList(QuoteStatus.approved),
                 _buildQuoteList(QuoteStatus.rejected),
-                _buildQuoteList(QuoteStatus.expired),
               ],
             ),
           ),
@@ -132,7 +173,12 @@ class _QuotesListScreenState extends State<QuotesListScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: () async => setState(() {}),
+      onRefresh: () async {
+        if (widget.authService.storage.firestoreSyncEnabled) {
+          await widget.authService.storage.downloadFromFirestore();
+        }
+        setState(() {});
+      },
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: quotes.length,
@@ -148,9 +194,17 @@ class _QuotesListScreenState extends State<QuotesListScreen>
     final property = widget.authService.storage.properties[quote.propertyId];
     final statusColor = QuoteStatus.getColor(quote.status);
     final statusIcon = QuoteStatus.getIcon(quote.status);
+    final isApproved = quote.status == QuoteStatus.approved;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      // Give approved cards a subtle green border to stand out
+      shape: isApproved
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Colors.green, width: 1.5),
+            )
+          : null,
       child: InkWell(
         onTap: () => _showQuoteDetails(quote),
         borderRadius: BorderRadius.circular(12),
@@ -162,28 +216,53 @@ class _QuotesListScreenState extends State<QuotesListScreen>
               // Header Row
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(statusIcon, size: 16, color: statusColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          QuoteStatus.getDisplayName(quote.status),
-                          style: TextStyle(
-                            color: statusColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                  // Approved badge is filled solid; others are tinted
+                  isApproved
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_circle, size: 16, color: Colors.white),
+                              const SizedBox(width: 5),
+                              const Text(
+                                'APPROVED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(statusIcon, size: 16, color: statusColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                QuoteStatus.getDisplayName(quote.status),
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
                   const Spacer(),
                   Text(
                     'Quote #${quote.id}',
@@ -244,23 +323,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                   ),
                   const Spacer(),
 
-                  // Expiration
-                  if (quote.status == QuoteStatus.sent) ...[
-                    Icon(
-                      Icons.timer,
-                      size: 16,
-                      color: quote.daysUntilExpiry <= 3 ? Colors.orange : Colors.grey,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${quote.daysUntilExpiry} days left',
-                      style: TextStyle(
-                        color: quote.daysUntilExpiry <= 3 ? Colors.orange : Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-
                   // Signature indicator for approved
                   if (quote.status == QuoteStatus.approved && quote.clientSignature != null) ...[
                     const Icon(Icons.draw, size: 16, color: Colors.green),
@@ -290,37 +352,8 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                 ),
               ],
 
-              // Approve/Decline Buttons for Sent Quotes
+              // Resend Button for Sent Quotes
               if (quote.status == QuoteStatus.sent) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _markQuoteApproved(quote),
-                        icon: const Icon(Icons.check_circle, size: 18),
-                        label: const Text('Approve'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _markQuoteDeclined(quote),
-                        icon: const Icon(Icons.cancel, size: 18),
-                        label: const Text('Decline'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -335,21 +368,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                 ),
               ],
 
-              // Resend Button for Expired Quotes
-              if (quote.status == QuoteStatus.expired) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _resendQuote(quote),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Extend & Resend'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -435,7 +453,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     _detailRow('Viewed', QuoteService.formatDateTime(quote.viewedAt)),
                   if (quote.signedAt != null)
                     _detailRow('Signed', QuoteService.formatDateTime(quote.signedAt)),
-                  _detailRow('Expires', QuoteService.formatDateTime(quote.expiresAt)),
 
                   const SizedBox(height: 16),
 
@@ -468,6 +485,8 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     _totalRow('Labor', quote.laborCost),
                   if (quote.discount > 0)
                     _totalRow('Discount', -quote.discount),
+                  if (quote.tax > 0)
+                    _totalRow('Tax', quote.tax),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -523,44 +542,9 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     ),
                   ],
 
-                  // Approve/Decline for Sent quotes
+                  // Resend for Sent quotes
                   if (quote.status == QuoteStatus.sent) ...[
                     const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _markQuoteApproved(quote);
-                            },
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text('Approve'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.all(16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _markQuoteDeclined(quote);
-                            },
-                            icon: const Icon(Icons.cancel),
-                            label: const Text('Decline'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              padding: const EdgeInsets.all(16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
@@ -575,23 +559,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     ),
                   ],
 
-                  // Resend Button for Expired quotes only
-                  if (quote.status == QuoteStatus.expired) ...[
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _resendQuote(quote);
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Extend & Resend Quote'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(16),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -638,110 +605,6 @@ class _QuotesListScreenState extends State<QuotesListScreen>
     );
   }
 
-  void _markQuoteApproved(Quote quote) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Approve Quote'),
-        content: const Text(
-          'Mark this quote as approved by the customer?\n\n'
-          'This indicates the customer has agreed to the quote and you can schedule repairs.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _updateQuoteStatus(quote, QuoteStatus.approved);
-            },
-            icon: const Icon(Icons.check_circle),
-            label: const Text('Approve'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _markQuoteDeclined(Quote quote) {
-    final notesController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Decline Quote'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Mark this quote as declined by the customer?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                labelText: 'Reason (optional)',
-                hintText: 'e.g., Price too high, Changed mind...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _updateQuoteStatus(
-                quote,
-                QuoteStatus.rejected,
-                notes: notesController.text.trim(),
-              );
-            },
-            icon: const Icon(Icons.cancel),
-            label: const Text('Decline'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _updateQuoteStatus(Quote quote, String newStatus, {String? notes}) {
-    final storage = widget.authService.storage;
-
-    final updatedQuote = quote.copyWith(
-      status: newStatus,
-      signedAt: newStatus == QuoteStatus.approved ? DateTime.now().toIso8601String() : null,
-      clientNotes: notes?.isNotEmpty == true ? notes : quote.clientNotes,
-    );
-
-    storage.quotes[quote.id] = updatedQuote;
-    storage.saveData();
-
-    setState(() {});
-
-    final statusName = newStatus == QuoteStatus.approved ? 'approved' : 'declined';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Quote #${quote.id} marked as $statusName'),
-        backgroundColor: newStatus == QuoteStatus.approved ? Colors.green : Colors.red,
-      ),
-    );
-  }
-
   void _scheduleRepairs(Quote quote) {
     final property = widget.authService.storage.properties[quote.propertyId];
     if (property == null) return;
@@ -760,142 +623,112 @@ class _QuotesListScreenState extends State<QuotesListScreen>
 
   void _resendQuote(Quote quote) {
     final property = widget.authService.storage.properties[quote.propertyId];
-    if (property == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Property not found'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Check if quote is expired and offer to extend
-    if (quote.status == QuoteStatus.expired) {
-      _showExtendAndResendDialog(quote, property);
-    } else {
-      _showResendOptions(quote, property);
-    }
+    _showResendOptions(quote, property);
   }
 
-  void _showExtendAndResendDialog(Quote quote, Property property) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Quote Expired'),
-        content: const Text(
-          'This quote has expired. Would you like to extend the expiration and resend it to the customer?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _extendAndResend(quote, property);
-            },
-            child: const Text('Extend & Resend'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _extendAndResend(Quote quote, Property property) {
-    final storage = widget.authService.storage;
-    final settings = storage.companySettings;
-    final expirationDays = settings?.quoteExpirationDays ?? 30;
-
-    // Update quote with new expiration date and mark as sent
-    final updatedQuote = quote.copyWith(
-      status: QuoteStatus.sent,
-      sentAt: DateTime.now().toIso8601String(),
-      expiresAt: DateTime.now().add(Duration(days: expirationDays)).toIso8601String(),
-    );
-
-    storage.quotes[quote.id] = updatedQuote;
-    storage.saveData();
-
-    setState(() {});
-    _showResendOptions(updatedQuote, property);
-  }
-
-  void _showResendOptions(Quote quote, Property property) {
+  void _showResendOptions(Quote quote, Property? property) {
     // Generate quote URL and messages
     final quoteUrl = QuoteService.generateQuoteUrl(quote.accessToken);
-    final emailMessage = QuoteService.formatQuoteMessage(
-      quote: quote,
-      property: property,
-      quoteUrl: quoteUrl,
-    );
-    final smsMessage = QuoteService.formatSmsMessage(
-      quote: quote,
-      property: property,
-      quoteUrl: quoteUrl,
-    );
+    final emailMessage = property != null
+        ? QuoteService.formatQuoteMessage(
+            quote: quote, property: property, quoteUrl: quoteUrl)
+        : 'View your quote: $quoteUrl';
+    final smsMessage = property != null
+        ? QuoteService.formatSmsMessage(
+            quote: quote, property: property, quoteUrl: quoteUrl)
+        : 'View your quote: $quoteUrl';
+
+    final emailCtrl = TextEditingController(text: property?.clientEmail ?? '');
+    final phoneCtrl = TextEditingController(text: property?.clientPhone ?? '');
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Resend Quote',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          left: 16, right: 16, top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Resend Quote',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Quote #${quote.id} - \$${quote.totalCost.toStringAsFixed(2)}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Client Email',
+                prefixIcon: Icon(Icons.email_outlined),
+                hintText: 'Enter email address',
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Quote #${quote.id} - \$${quote.totalCost.toStringAsFixed(2)}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Client Phone',
+                prefixIcon: Icon(Icons.phone_outlined),
+                hintText: 'Enter phone number',
               ),
-              const SizedBox(height: 24),
-              if (property.clientEmail.isNotEmpty)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _sendViaEmail(quote, property, emailMessage);
-                  },
-                  icon: const Icon(Icons.email),
-                  label: Text('Send via Email\n${property.clientEmail}',
-                      textAlign: TextAlign.center),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                ),
-              if (property.clientEmail.isNotEmpty && property.clientPhone.isNotEmpty)
-                const SizedBox(height: 12),
-              if (property.clientPhone.isNotEmpty)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _sendViaSms(property, smsMessage);
-                  },
-                  icon: const Icon(Icons.sms),
-                  label: Text('Send via SMS\n${property.clientPhone}',
-                      textAlign: TextAlign.center),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-                label: const Text('Cancel'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final email = emailCtrl.text.trim();
+                if (email.isEmpty) return;
+                Navigator.pop(context);
+                final subject = Uri.encodeComponent(
+                    'Quote #${quote.id} from ${quote.companyName}');
+                final body = Uri.encodeComponent(emailMessage);
+                final uri = Uri.parse('mailto:$email?subject=$subject&body=$body');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+              icon: const Icon(Icons.email),
+              label: const Text('Send via Email'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(14)),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final phone = phoneCtrl.text.trim();
+                if (phone.isEmpty) return;
+                Navigator.pop(context);
+                final cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+                final body = Uri.encodeComponent(smsMessage);
+                final uri = Uri.parse('sms:$cleanPhone?body=$body');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
+              icon: const Icon(Icons.sms),
+              label: const Text('Send via Text'),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(14)),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              label: const Text('Cancel'),
+              style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(14)),
+            ),
+          ],
         ),
       ),
     );

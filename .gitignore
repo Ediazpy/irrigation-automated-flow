@@ -51,7 +51,17 @@ coverage/
 
 # Local configuration
 *.env
+.env
 .env.*
+
+# Firebase / Google Cloud credentials — never commit these
+serviceAccountKey.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+.firebase/
+
+# Node
+node_modules/
 
 # Generated files
 *.g.dart

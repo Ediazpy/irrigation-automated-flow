@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
 import '../../models/user.dart';
-import '../../utils/password_hash.dart';
 
 class UsersScreen extends StatefulWidget {
   final AuthService authService;
@@ -13,196 +14,186 @@ class UsersScreen extends StatefulWidget {
 }
 
 class _UsersScreenState extends State<UsersScreen> {
+  bool _busy = false;
+
+  Future<void> _refreshUsers() async {
+    try {
+      final users = await FirestoreService().getAllUsers();
+      widget.authService.storage.users
+        ..clear()
+        ..addAll(users);
+      await widget.authService.storage.saveData();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  void _showError(Object e) {
+    if (!mounted) return;
+    String message;
+    if (e is FirebaseFunctionsException) {
+      // Server-side validation errors carry a human-readable message;
+      // infrastructure errors don't, so translate the common codes.
+      message = e.message != null && e.message!.isNotEmpty && e.message != 'null'
+          ? e.message!
+          : switch (e.code) {
+              'unauthenticated' => 'Your session expired. Sign out and back in.',
+              'permission-denied' => 'Only managers can do this.',
+              'not-found' || 'unavailable' || 'internal' =>
+                'The server is unavailable right now. Try again in a moment.',
+              _ => 'Something went wrong (${e.code}). Try again.',
+            };
+    } else {
+      message = 'Something went wrong. Check your connection and try again.';
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final users = widget.authService.storage.users.entries.toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Users')),
-      body: users.isEmpty
-          ? const Center(child: Text('No users found'))
-          : ListView.builder(
-              itemCount: users.length,
-              itemBuilder: (context, index) {
-                final email = users[index].key;
-                final user = users[index].value;
-                final isLocked = widget.authService.isAccountLocked(email);
+      body: Stack(
+        children: [
+          users.isEmpty
+              ? const Center(child: Text('No users found'))
+              : ListView.builder(
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index].value;
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    leading: Stack(
-                      children: [
-                        CircleAvatar(
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
                           backgroundColor: user.role == 'manager'
                               ? Colors.blue.shade100
                               : Colors.green.shade100,
-                          child: Text(user.name.isNotEmpty ? user.name[0].toUpperCase() : '?'),
+                          child: Text(
+                              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?'),
                         ),
-                        if (isLocked)
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.lock, size: 12, color: Colors.white),
-                            ),
-                          ),
-                      ],
-                    ),
-                    title: Row(
-                      children: [
-                        Text(user.name),
-                        if (user.isArchived) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'Archived',
-                              style: TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(user.email),
-                        if (isLocked)
-                          const Text(
-                            'Account Locked',
-                            style: TextStyle(color: Colors.red, fontSize: 12),
-                          ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Chip(
-                          label: Text(
-                            user.role,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          backgroundColor:
-                              user.role == 'manager' ? Colors.blue.shade100 : Colors.green.shade100,
-                        ),
-                        PopupMenuButton<String>(
-                          onSelected: (value) => _handleUserAction(value, email, user),
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'reset_password',
-                              child: ListTile(
-                                leading: Icon(Icons.password),
-                                title: Text('Reset Password'),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                            if (isLocked)
-                              const PopupMenuItem(
-                                value: 'unlock',
-                                child: ListTile(
-                                  leading: Icon(Icons.lock_open, color: Colors.green),
-                                  title: Text('Unlock Account'),
-                                  contentPadding: EdgeInsets.zero,
+                        title: Row(
+                          children: [
+                            Text(user.name),
+                            if (user.isArchived) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Archived',
+                                  style: TextStyle(fontSize: 10),
                                 ),
                               ),
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: ListTile(
-                                leading: Icon(Icons.edit),
-                                title: Text('Edit User'),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                            if (!user.isArchived)
-                              const PopupMenuItem(
-                                value: 'archive',
-                                child: ListTile(
-                                  leading: Icon(Icons.archive, color: Colors.orange),
-                                  title: Text('Archive User'),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              )
-                            else
-                              const PopupMenuItem(
-                                value: 'unarchive',
-                                child: ListTile(
-                                  leading: Icon(Icons.unarchive, color: Colors.blue),
-                                  title: Text('Unarchive User'),
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
+                            ],
                           ],
                         ),
-                      ],
-                    ),
-                    isThreeLine: isLocked,
-                  ),
-                );
-              },
+                        subtitle: Text(user.email),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Chip(
+                              label: Text(
+                                user.role,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              backgroundColor: user.role == 'manager'
+                                  ? Colors.blue.shade100
+                                  : Colors.green.shade100,
+                            ),
+                            PopupMenuButton<String>(
+                              onSelected: (value) => _handleUserAction(value, user),
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'reset_password',
+                                  child: ListTile(
+                                    leading: Icon(Icons.password),
+                                    title: Text('Send Password Reset'),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: ListTile(
+                                    leading: Icon(Icons.edit),
+                                    title: Text('Edit User'),
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                                if (!user.isArchived)
+                                  const PopupMenuItem(
+                                    value: 'archive',
+                                    child: ListTile(
+                                      leading:
+                                          Icon(Icons.archive, color: Colors.orange),
+                                      title: Text('Archive User'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  )
+                                else
+                                  const PopupMenuItem(
+                                    value: 'unarchive',
+                                    child: ListTile(
+                                      leading:
+                                          Icon(Icons.unarchive, color: Colors.blue),
+                                      title: Text('Unarchive User'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+          if (_busy)
+            Container(
+              color: Colors.black.withOpacity(0.1),
+              child: const Center(child: CircularProgressIndicator()),
             ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _createUser,
+        onPressed: _busy ? null : _createUser,
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  void _handleUserAction(String action, String email, User user) {
+  void _handleUserAction(String action, User user) {
     switch (action) {
       case 'reset_password':
-        _resetPassword(email, user);
-        break;
-      case 'unlock':
-        _unlockAccount(email);
+        _resetPassword(user);
         break;
       case 'edit':
-        _editUser(email, user);
+        _editUser(user);
         break;
       case 'archive':
-        _archiveUser(email, user);
+        _archiveUser(user);
         break;
       case 'unarchive':
-        _unarchiveUser(email, user);
+        _unarchiveUser(user);
         break;
     }
   }
 
-  void _resetPassword(String email, User user) {
-    final newPasswordController = TextEditingController(text: 'temp1234');
-
+  void _resetPassword(User user) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Password'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reset password for ${user.name}?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: newPasswordController,
-              decoration: const InputDecoration(
-                labelText: 'New Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Default: temp1234',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ],
+        title: const Text('Send Password Reset'),
+        content: Text(
+          'Send a password reset email to ${user.email}? '
+          'They\'ll get a link to choose a new password.',
         ),
         actions: [
           TextButton(
@@ -210,69 +201,32 @@ class _UsersScreenState extends State<UsersScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              final newPassword = newPasswordController.text.trim();
-              if (newPassword.isEmpty) return;
-
-              setState(() {
-                widget.authService.storage.users[email] = user.copyWith(
-                  password: PasswordHash.hashPassword(newPassword),
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await widget.authService.sendPasswordReset(user.email);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Password reset email sent to ${user.email}'),
+                    backgroundColor: Colors.green,
+                  ),
                 );
-                // Also unlock the account when resetting password
-                widget.authService.resetFailedAttempts(email);
-              });
-              widget.authService.storage.saveData();
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Password reset for ${user.name}'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              } catch (e) {
+                _showError(e);
+              }
             },
-            child: const Text('Reset'),
+            child: const Text('Send'),
           ),
         ],
       ),
     );
   }
 
-  void _unlockAccount(String email) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Unlock Account'),
-        content: const Text('This will reset failed login attempts and unlock the account.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                widget.authService.resetFailedAttempts(email);
-              });
-
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Account unlocked'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Unlock'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editUser(String email, User user) {
+  void _editUser(User user) {
     final nameController = TextEditingController(text: user.name);
     String role = user.role;
+    final isSelf = user.uid == widget.authService.currentUser?.uid;
 
     showDialog(
       context: context,
@@ -287,7 +241,8 @@ class _UsersScreenState extends State<UsersScreen> {
                 decoration: const InputDecoration(labelText: 'Name'),
               ),
               const SizedBox(height: 12),
-              Text('Email: $email', style: const TextStyle(color: Colors.grey)),
+              Text('Email: ${user.email}',
+                  style: const TextStyle(color: Colors.grey)),
               const SizedBox(height: 12),
               DropdownButton<String>(
                 value: role,
@@ -296,7 +251,9 @@ class _UsersScreenState extends State<UsersScreen> {
                   DropdownMenuItem(value: 'technician', child: Text('Technician')),
                   DropdownMenuItem(value: 'manager', child: Text('Manager')),
                 ],
-                onChanged: (v) => setDialogState(() => role = v!),
+                // Changing your own role could lock the company out of
+                // admin access — the server refuses it, so don't offer it.
+                onChanged: isSelf ? null : (v) => setDialogState(() => role = v!),
               ),
             ],
           ),
@@ -306,17 +263,24 @@ class _UsersScreenState extends State<UsersScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nameController.text.isEmpty) return;
-
-                setState(() {
-                  widget.authService.storage.users[email] = user.copyWith(
-                    name: nameController.text,
-                    role: role,
-                  );
-                });
-                widget.authService.storage.saveData();
                 Navigator.pop(context);
+                setState(() => _busy = true);
+                try {
+                  if (nameController.text != user.name) {
+                    await FirestoreService()
+                        .saveUser(user.copyWith(name: nameController.text));
+                  }
+                  if (role != user.role) {
+                    await widget.authService.setUserRole(user.uid, role);
+                  }
+                  await _refreshUsers();
+                } catch (e) {
+                  _showError(e);
+                } finally {
+                  if (mounted) setState(() => _busy = false);
+                }
               },
               child: const Text('Save'),
             ),
@@ -326,12 +290,22 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  void _archiveUser(String email, User user) {
+  void _archiveUser(User user) {
+    if (user.uid == widget.authService.currentUser?.uid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You cannot archive your own account'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Archive User'),
-        content: Text('Archive ${user.name}? They will no longer be able to log in.'),
+        content: Text(
+            'Archive ${user.name}? Their sign-in will be disabled and they will no longer be able to log in.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -339,12 +313,17 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            onPressed: () {
-              setState(() {
-                widget.authService.storage.users[email] = user.copyWith(isArchived: true);
-              });
-              widget.authService.storage.saveData();
+            onPressed: () async {
               Navigator.pop(context);
+              setState(() => _busy = true);
+              try {
+                await widget.authService.setUserArchived(user.uid, true);
+                await _refreshUsers();
+              } catch (e) {
+                _showError(e);
+              } finally {
+                if (mounted) setState(() => _busy = false);
+              }
             },
             child: const Text('Archive'),
           ),
@@ -353,24 +332,29 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  void _unarchiveUser(String email, User user) {
-    setState(() {
-      widget.authService.storage.users[email] = user.copyWith(isArchived: false);
-    });
-    widget.authService.storage.saveData();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${user.name} has been unarchived'),
-        backgroundColor: Colors.green,
-      ),
-    );
+  void _unarchiveUser(User user) async {
+    setState(() => _busy = true);
+    try {
+      await widget.authService.setUserArchived(user.uid, false);
+      await _refreshUsers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${user.name} has been unarchived'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      _showError(e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _createUser() {
     final nameController = TextEditingController();
     final emailController = TextEditingController();
-    final passwordController = TextEditingController(text: 'temp1234');
+    final passwordController = TextEditingController();
     String role = 'technician';
 
     showDialog(
@@ -401,10 +385,11 @@ class _UsersScreenState extends State<UsersScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
+                  obscureText: true,
                   decoration: const InputDecoration(
-                    labelText: 'Password',
+                    labelText: 'Temporary Password',
                     border: OutlineInputBorder(),
-                    helperText: 'Default: temp1234',
+                    helperText: 'At least 6 characters — they can change it later',
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -429,7 +414,7 @@ class _UsersScreenState extends State<UsersScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final email = emailController.text.trim().toLowerCase();
                 final name = nameController.text.trim();
                 final password = passwordController.text.trim();
@@ -454,33 +439,38 @@ class _UsersScreenState extends State<UsersScreen> {
                   return;
                 }
 
-                if (widget.authService.storage.users.containsKey(email)) {
+                if (password.length < 6) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Email already exists'),
+                      content: Text('Password must be at least 6 characters'),
                       backgroundColor: Colors.orange,
                     ),
                   );
                   return;
                 }
 
-                setState(() {
-                  widget.authService.storage.users[email] = User(
+                Navigator.pop(context);
+                setState(() => _busy = true);
+                try {
+                  await widget.authService.createUser(
                     email: email,
+                    password: password,
                     name: name,
                     role: role,
-                    password: PasswordHash.hashPassword(password),
                   );
-                });
-                widget.authService.storage.saveData();
-                Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('User $name created'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                  await _refreshUsers();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('User $name created'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  _showError(e);
+                } finally {
+                  if (mounted) setState(() => _busy = false);
+                }
               },
               child: const Text('Create'),
             ),

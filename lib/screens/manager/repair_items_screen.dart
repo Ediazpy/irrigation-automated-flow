@@ -23,6 +23,7 @@ class _RepairItemsScreenState extends State<RepairItemsScreen> {
         title: const Text('Repair Items'),
       ),
       body: ListView.builder(
+        padding: const EdgeInsets.only(bottom: 80),
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];

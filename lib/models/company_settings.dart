@@ -8,7 +8,6 @@ class CompanySettings {
   final int quoteExpirationDays;
   final String defaultFooterMessage;
   final bool photosRequired; // Manager toggle: require techs to take repair photos
-  final String masterResetCode; // Master code for admin lockout recovery
 
   CompanySettings({
     required this.companyName,
@@ -20,7 +19,6 @@ class CompanySettings {
     this.quoteExpirationDays = 30,
     this.defaultFooterMessage = 'Thank you for your business!',
     this.photosRequired = false,
-    this.masterResetCode = '',
   });
 
   static const String defaultTerms = '''
@@ -53,12 +51,10 @@ TERMS AND CONDITIONS
       'quote_expiration_days': quoteExpirationDays,
       'default_footer_message': defaultFooterMessage,
       'photos_required': photosRequired,
-      'master_reset_code': masterResetCode,
     };
   }
 
-  /// Firestore-safe serialization — excludes master_reset_code
-  /// (master reset code is sensitive and only needed locally)
+  /// Firestore serialization (settings/{companyId} document)
   Map<String, dynamic> toFirestoreJson() {
     return {
       'company_name': companyName,
@@ -84,7 +80,6 @@ TERMS AND CONDITIONS
       quoteExpirationDays: json['quote_expiration_days'] ?? 30,
       defaultFooterMessage: json['default_footer_message'] ?? 'Thank you for your business!',
       photosRequired: json['photos_required'] ?? false,
-      masterResetCode: json['master_reset_code'] ?? '',
     );
   }
 
@@ -98,7 +93,6 @@ TERMS AND CONDITIONS
     int? quoteExpirationDays,
     String? defaultFooterMessage,
     bool? photosRequired,
-    String? masterResetCode,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -110,7 +104,6 @@ TERMS AND CONDITIONS
       quoteExpirationDays: quoteExpirationDays ?? this.quoteExpirationDays,
       defaultFooterMessage: defaultFooterMessage ?? this.defaultFooterMessage,
       photosRequired: photosRequired ?? this.photosRequired,
-      masterResetCode: masterResetCode ?? this.masterResetCode,
     );
   }
 }

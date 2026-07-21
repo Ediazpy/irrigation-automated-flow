@@ -48,11 +48,6 @@ class QuoteService {
       ));
     }
 
-    // Calculate expiration date
-    final expiresAt = DateTime.now()
-        .add(Duration(days: settings.quoteExpirationDays))
-        .toIso8601String();
-
     return Quote(
       id: quoteId,
       inspectionId: inspection.id,
@@ -60,6 +55,7 @@ class QuoteService {
       lineItems: lineItems,
       laborCost: inspection.laborCost,
       discount: inspection.discount,
+      tax: inspection.tax,
       status: QuoteStatus.draft,
       accessToken: generateAccessToken(),
       termsAndConditions: settings.defaultTermsAndConditions,
@@ -67,11 +63,10 @@ class QuoteService {
       companyPhone: settings.companyPhone,
       companyEmail: settings.companyEmail,
       createdAt: DateTime.now().toIso8601String(),
-      expiresAt: expiresAt,
     );
   }
 
-  /// Format quote for email message with full details and clickable response links
+  /// Format quote for email message — clean, professional layout
   static String formatQuoteMessage({
     required Quote quote,
     required Property property,
@@ -79,7 +74,6 @@ class QuoteService {
   }) {
     final buffer = StringBuffer();
 
-    buffer.writeln('═══════════════════════════════════════');
     buffer.writeln('${quote.companyName}');
     if (quote.companyPhone.isNotEmpty) {
       buffer.writeln('Phone: ${quote.companyPhone}');
@@ -87,20 +81,17 @@ class QuoteService {
     if (quote.companyEmail.isNotEmpty) {
       buffer.writeln('Email: ${quote.companyEmail}');
     }
-    buffer.writeln('═══════════════════════════════════════');
     buffer.writeln('');
     buffer.writeln('QUOTE #${quote.id}');
     buffer.writeln('Date: ${_formatDate(quote.createdAt)}');
-    buffer.writeln('Expires: ${_formatDate(quote.expiresAt)}');
     buffer.writeln('');
     buffer.writeln('Property: ${property.address}');
     if (property.clientName.isNotEmpty) {
       buffer.writeln('Client: ${property.clientName}');
     }
     buffer.writeln('');
-    buffer.writeln('───────────────────────────────────────');
-    buffer.writeln('REPAIR ITEMS:');
-    buffer.writeln('───────────────────────────────────────');
+    buffer.writeln('REPAIR ITEMS');
+    buffer.writeln('');
 
     // Group items by zone
     final zoneItems = <int?, List<dynamic>>{};
@@ -123,10 +114,8 @@ class QuoteService {
     for (var zone in sortedZones) {
       final items = zoneItems[zone]!;
       if (zone != null) {
-        buffer.writeln('');
         buffer.writeln('Zone $zone:');
       } else if (items.isNotEmpty) {
-        buffer.writeln('');
         buffer.writeln('Other Items:');
       }
 
@@ -134,51 +123,33 @@ class QuoteService {
         final desc = item.displayDescription;
         final qty = item.quantity;
         final price = item.totalPrice.toStringAsFixed(2);
-        buffer.writeln('  • $desc (x$qty) - \$$price');
+        buffer.writeln('  ${desc} (x$qty)  \$$price');
       }
+      buffer.writeln('');
     }
 
-    buffer.writeln('');
-    buffer.writeln('───────────────────────────────────────');
-    buffer.writeln('SUMMARY:');
-    buffer.writeln('───────────────────────────────────────');
-    buffer.writeln('Materials: \$${quote.materialsCost.toStringAsFixed(2)}');
+    buffer.writeln('SUMMARY');
+    buffer.writeln('Subtotal: \$${quote.materialsCost.toStringAsFixed(2)}');
     if (quote.laborCost > 0) {
       buffer.writeln('Labor: \$${quote.laborCost.toStringAsFixed(2)}');
     }
     if (quote.discount > 0) {
       buffer.writeln('Discount: -\$${quote.discount.toStringAsFixed(2)}');
     }
+    if (quote.tax > 0) {
+      buffer.writeln('Tax: +\$${quote.tax.toStringAsFixed(2)}');
+    }
     buffer.writeln('');
     buffer.writeln('TOTAL: \$${quote.totalCost.toStringAsFixed(2)}');
     buffer.writeln('');
-    buffer.writeln('═══════════════════════════════════════');
-    buffer.writeln('         RESPOND TO THIS QUOTE');
-    buffer.writeln('═══════════════════════════════════════');
-    buffer.writeln('');
-    buffer.writeln('Click one of the links below to respond:');
-    buffer.writeln('');
-
-    // Generate clickable mailto links for approve/decline
-    final approveSubject = Uri.encodeComponent('APPROVED - Quote #${quote.id}');
-    final approveBody = Uri.encodeComponent('I APPROVE Quote #${quote.id} for \$${quote.totalCost.toStringAsFixed(2)}.\n\nProperty: ${property.address}\n\nPlease schedule the repairs at your earliest convenience.\n\nThank you!');
-    final declineSubject = Uri.encodeComponent('DECLINED - Quote #${quote.id}');
-    final declineBody = Uri.encodeComponent('I DECLINE Quote #${quote.id}.\n\nProperty: ${property.address}\n\nReason: ');
-
-    buffer.writeln('✅ APPROVE THIS QUOTE:');
-    buffer.writeln('mailto:${quote.companyEmail}?subject=$approveSubject&body=$approveBody');
-    buffer.writeln('');
-    buffer.writeln('❌ DECLINE THIS QUOTE:');
-    buffer.writeln('mailto:${quote.companyEmail}?subject=$declineSubject&body=$declineBody');
-    buffer.writeln('');
-    buffer.writeln('───────────────────────────────────────');
-    buffer.writeln('Or simply reply to this email with "APPROVED" or "DECLINED"');
-    if (quote.companyPhone.isNotEmpty) {
-      buffer.writeln('Or call us at ${quote.companyPhone}');
+    if (quoteUrl.isNotEmpty) {
+      buffer.writeln('VIEW & APPROVE YOUR QUOTE ONLINE:');
+      buffer.writeln(quoteUrl);
+      buffer.writeln('');
     }
-    buffer.writeln('───────────────────────────────────────');
-    buffer.writeln('');
-    buffer.writeln('This quote is valid until ${_formatDate(quote.expiresAt)}.');
+    if (quote.companyPhone.isNotEmpty) {
+      buffer.writeln('Please contact us at ${quote.companyPhone} with any questions.');
+    }
     buffer.writeln('');
     buffer.writeln('Thank you for your business!');
     buffer.writeln('${quote.companyName}');
@@ -186,37 +157,35 @@ class QuoteService {
     return buffer.toString();
   }
 
-  /// Format short SMS message with response instructions
+  /// Format short SMS message — clean, professional
   static String formatSmsMessage({
     required Quote quote,
     required Property property,
     required String quoteUrl,
   }) {
     final buffer = StringBuffer();
-    buffer.write('${quote.companyName} - Quote #${quote.id}\n');
+    buffer.write('${quote.companyName}\n');
+    buffer.write('Quote #${quote.id}\n');
     buffer.write('${property.address}\n\n');
 
     // Add brief item list
     final itemCount = quote.lineItems.length;
     if (itemCount > 0) {
-      buffer.write('Items:\n');
       for (var i = 0; i < itemCount && i < 5; i++) {
         final item = quote.lineItems[i];
-        buffer.write('• ${item.displayDescription} x${item.quantity}\n');
+        buffer.write('${item.displayDescription} x${item.quantity}\n');
       }
       if (itemCount > 5) {
         buffer.write('...and ${itemCount - 5} more items\n');
       }
     }
 
-    buffer.write('\nTOTAL: \$${quote.totalCost.toStringAsFixed(2)}\n');
-    buffer.write('Expires: ${_formatDate(quote.expiresAt)}\n\n');
-    buffer.write('─────────────────\n');
-    buffer.write('Reply YES to APPROVE\n');
-    buffer.write('Reply NO to DECLINE\n');
-    buffer.write('─────────────────\n');
+    buffer.write('\nTotal: \$${quote.totalCost.toStringAsFixed(2)}\n');
+    if (quoteUrl.isNotEmpty) {
+      buffer.write('\nView & approve your quote:\n$quoteUrl\n');
+    }
     if (quote.companyPhone.isNotEmpty) {
-      buffer.write('Or call ${quote.companyPhone}');
+      buffer.write('\nCall ${quote.companyPhone} with questions.');
     }
 
     return buffer.toString();

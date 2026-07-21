@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../services/auth_service.dart';
 import '../../models/repair_task.dart';
 import '../../constants/status_constants.dart';
+import '../../utils/map_launcher.dart';
 
 class RepairTasksListScreen extends StatefulWidget {
   final AuthService authService;
@@ -20,7 +22,7 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -62,11 +64,14 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
         title: const Text('Repair Tasks'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'All'),
+            Tab(text: 'Needs Reschedule'),
             Tab(text: 'Assigned'),
             Tab(text: 'In Progress'),
             Tab(text: 'Completed'),
+            Tab(text: 'Cancelled'),
           ],
         ),
       ),
@@ -94,9 +99,12 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
               controller: _tabController,
               children: [
                 _buildTaskList(null),
+                // Tasks a technician kept open for another day
+                _buildTaskList(RepairTaskStatus.pending),
                 _buildTaskList(RepairTaskStatus.assigned),
                 _buildTaskList(RepairTaskStatus.inProgress),
                 _buildTaskList(RepairTaskStatus.completed),
+                _buildTaskList(RepairTaskStatus.cancelled),
               ],
             ),
           ),
@@ -235,6 +243,8 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
                       ),
                     ),
                   ),
+                  if (property != null && property.address.isNotEmpty)
+                    OpenInMapsButton(address: property.address),
                 ],
               ),
               const SizedBox(height: 4),
@@ -461,11 +471,238 @@ class _RepairTasksListScreenState extends State<RepairTasksListScreen>
                       child: Text(task.completionNotes!),
                     ),
                   ],
+
+                  // Edit / Cancel actions
+                  if (task.status != RepairTaskStatus.completed &&
+                      task.status != RepairTaskStatus.cancelled) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _editTask(task);
+                        },
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit Task'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5E9),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _cancelTask(task);
+                        },
+                        icon: const Icon(Icons.cancel_outlined),
+                        label: const Text('Cancel Task'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.all(14),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _editTask(RepairTask task) {
+    DateTime selectedDate;
+    try {
+      selectedDate = DateFormat('yyyy-MM-dd').parse(task.scheduledDate);
+    } catch (_) {
+      selectedDate = DateTime.now().add(const Duration(days: 1));
+    }
+
+    // Any active employee can be assigned, not just technicians
+    final availableTechs = widget.authService.storage.users.values
+        .where((u) => !u.isArchived)
+        .toList();
+    final selectedTechs = List<String>.from(task.assignedTechnicians);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              left: 16, right: 16, top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Edit Task #${task.id}',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // Scheduled Date
+                  const Text('Scheduled Date',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now().subtract(
+                            const Duration(days: 365)),
+                        lastDate: DateTime.now()
+                            .add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setModalState(() => selectedDate = picked);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 18),
+                          const SizedBox(width: 8),
+                          Text(DateFormat('MMM d, yyyy')
+                              .format(selectedDate)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Technicians
+                  const Text('Assigned Technicians',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  ...availableTechs.map((user) => CheckboxListTile(
+                        title: Text(user.name),
+                        subtitle: Text(user.email,
+                            style: const TextStyle(fontSize: 12)),
+                        value: selectedTechs.contains(user.email),
+                        dense: true,
+                        onChanged: (checked) {
+                          setModalState(() {
+                            if (checked == true) {
+                              selectedTechs.add(user.email);
+                            } else {
+                              selectedTechs.remove(user.email);
+                            }
+                          });
+                        },
+                      )),
+                  const SizedBox(height: 16),
+
+                  // Save button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: selectedTechs.isEmpty
+                          ? null
+                          : () {
+                              final storage =
+                                  widget.authService.storage;
+                              final updated = task.copyWith(
+                                scheduledDate: DateFormat('yyyy-MM-dd')
+                                    .format(selectedDate),
+                                assignedTechnicians: selectedTechs,
+                                // A kept-open task goes back on the
+                                // technician's list once rescheduled
+                                status: task.status ==
+                                        RepairTaskStatus.pending
+                                    ? RepairTaskStatus.assigned
+                                    : task.status,
+                              );
+                              storage.repairTasks[task.id] = updated;
+                              storage.saveData();
+                              Navigator.pop(ctx);
+                              setState(() {});
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Task updated'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0EA5E9),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(14),
+                      ),
+                      child: const Text('Save Changes'),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _cancelTask(RepairTask task) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Task'),
+        content: Text(
+            'Cancel Task #${task.id}? This cannot be undone and the technician will no longer see this task.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep Task')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              final storage = widget.authService.storage;
+              storage.repairTasks[task.id] =
+                  task.copyWith(status: RepairTaskStatus.cancelled);
+              storage.saveData();
+              setState(() {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Task cancelled'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            child: const Text('Cancel Task'),
+          ),
+        ],
       ),
     );
   }

@@ -1,79 +1,210 @@
 rules_version = '2';
 
-// IrriTrack Firestore Security Rules
-// Deploy via: firebase deploy --only firestore:rules
+// IAF Firestore Security Rules
 //
-// Current auth model: App uses local auth (not Firebase Auth yet)
-// These rules validate data structure and allowed values to prevent
-// malformed writes. Reads are open since there's no Firebase Auth.
-// Sensitive data (security_answers, master_reset_code) is NOT uploaded.
-// TODO: When Firebase Auth is integrated, add request.auth checks.
+// Identity model:
+//  - request.auth.token.role       'manager' (admin) | 'technician' — custom
+//  - request.auth.token.companyId  tenant id                          claims
+//  Claims are set server-side by Cloud Functions (Admin SDK) and signed into
+//  the ID token; the client cannot forge them. Role is NEVER read from a
+//  Firestore document the user can write.
+//
+// Every business document carries company_id / created_by / created_at.
+// They are required on create and immutable afterwards. Default deny at the
+// bottom: any collection not matched here is refused.
+//
+// Deploy: firebase deploy --only firestore:rules
+// Test:   npm test in test/rules (runs against the local emulator)
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ============ USERS ============
-    // Note: security_answers are excluded from Firestore uploads
-    match /users/{email} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['password', 'role', 'name'])
-        && request.resource.data.role in ['manager', 'technician']
-        && request.resource.data.name is string
-        && request.resource.data.password is string
-        && !request.resource.data.keys().hasAny(['security_answers']);
+    // ---------- helpers ----------
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // ============ PROPERTIES ============
-    match /properties/{propertyId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['address'])
-        && request.resource.data.address is string;
+    function myCompany() {
+      return request.auth.token.companyId;
     }
 
-    // ============ INSPECTIONS ============
-    match /inspections/{inspectionId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['property_id', 'status', 'date'])
-        && request.resource.data.status in ['assigned', 'in_progress', 'review', 'quote_sent', 'completed'];
+    function hasCompany() {
+      return isSignedIn()
+        && ('companyId' in request.auth.token)
+        && request.auth.token.companyId is string;
     }
 
-    // ============ QUOTES ============
-    match /quotes/{quoteId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['status', 'access_token'])
-        && request.resource.data.status in ['draft', 'sent', 'viewed', 'approved', 'rejected', 'expired'];
+    function isManager() {
+      return hasCompany() && request.auth.token.role == 'manager';
     }
 
-    // ============ REPAIR TASKS ============
-    match /repair_tasks/{taskId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['status'])
-        && request.resource.data.status in ['pending', 'assigned', 'in_progress', 'completed'];
+    // Read access: doc belongs to the caller's company
+    function inMyCompany() {
+      return hasCompany() && resource.data.company_id == myCompany();
     }
 
-    // ============ COMPANY SETTINGS ============
-    // Note: master_reset_code is excluded from Firestore uploads
-    match /settings/{docId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['company_name'])
-        && request.resource.data.company_name is string
-        && !request.resource.data.keys().hasAny(['master_reset_code']);
+    // Create: doc is stamped with the caller's company and identity
+    function createStamped() {
+      return hasCompany()
+        && request.resource.data.company_id == myCompany()
+        && request.resource.data.created_by == request.auth.uid
+        && request.resource.data.created_at is string;
     }
 
-    // ============ METADATA (ID counters) ============
+    // Update: ownership fields are immutable
+    function ownershipIntact() {
+      return request.resource.data.company_id == resource.data.company_id
+        && request.resource.data.created_by == resource.data.created_by
+        && request.resource.data.created_at == resource.data.created_at;
+    }
+
+    function canUpdateCompanyDoc() {
+      return inMyCompany() && ownershipIntact();
+    }
+
+    // ---------- users (profiles only; credentials live in Firebase Auth) ----------
+    // Readable by self or a manager of the same company. A user may edit
+    // their own profile but never their own role, company, or archived flag.
+    // Role/company/archived changes go through Cloud Functions (Admin SDK)
+    // so Auth claims and the profile can never drift apart.
+
+    match /users/{uid} {
+      allow get: if isSignedIn()
+        && (request.auth.uid == uid
+            || (isManager() && resource.data.company_id == myCompany()));
+      allow list: if isManager() && resource.data.company_id == myCompany();
+
+      // Profiles are created by Cloud Functions only
+      allow create: if false;
+
+      allow update: if isSignedIn()
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.company_id == resource.data.company_id
+        && request.resource.data.is_archived == resource.data.is_archived
+        && (request.auth.uid == uid
+            || (isManager() && resource.data.company_id == myCompany()));
+
+      // Users are archived (via Cloud Function), never deleted by clients
+      allow delete: if false;
+    }
+
+    // ---------- properties / clients: any company member ----------
+
+    match /properties/{id} {
+      allow read: if inMyCompany();
+      allow create: if createStamped();
+      allow update: if canUpdateCompanyDoc();
+      allow delete: if isManager() && inMyCompany();
+    }
+
+    match /clients/{id} {
+      allow read: if inMyCompany();
+      allow create: if createStamped();
+      allow update: if canUpdateCompanyDoc();
+      allow delete: if isManager() && inMyCompany();
+    }
+
+    // ---------- inspections: techs may edit their own, managers any ----------
+    // "Their own" = they created it or are one of the assigned technicians.
+
+    match /inspections/{id} {
+      allow read: if inMyCompany();
+      allow create: if createStamped();
+      allow update: if canUpdateCompanyDoc()
+        && (isManager()
+            || resource.data.created_by == request.auth.uid
+            || request.auth.token.email in resource.data.get('technicians', []));
+      allow delete: if isManager() && inMyCompany();
+    }
+
+    // ---------- repair_tasks: techs may edit their own/assigned, managers any ----------
+
+    match /repair_tasks/{id} {
+      allow read: if inMyCompany();
+      allow create: if createStamped();
+      allow update: if canUpdateCompanyDoc()
+        && (isManager()
+            || resource.data.created_by == request.auth.uid
+            || request.auth.token.email in resource.data.get('assigned_technicians', []));
+      allow delete: if isManager() && inMyCompany();
+    }
+
+    // ---------- quotes / invoices: company-readable, manager-writable ----------
+
+    match /quotes/{id} {
+      allow read: if inMyCompany();
+      allow create: if isManager() && createStamped();
+      allow update: if isManager() && canUpdateCompanyDoc();
+      allow delete: if isManager() && inMyCompany();
+    }
+
+    match /invoices/{id} {
+      allow read: if inMyCompany();
+      allow create: if isManager() && createStamped();
+      allow update: if isManager() && canUpdateCompanyDoc();
+      // Invoices are financial records: void them, never hard-delete
+      allow delete: if false;
+    }
+
+    // ---------- settings/{companyId}: company profile ----------
+
+    match /settings/{companyId} {
+      allow read: if hasCompany() && myCompany() == companyId;
+      allow write: if isManager() && myCompany() == companyId;
+    }
+
+    // ---------- counters/{companyId}: per-company ID allocation ----------
+
+    match /counters/{companyId} {
+      allow read, write: if hasCompany() && myCompany() == companyId;
+    }
+
+    // ---------- public_quotes/{token}: customer quote approval ----------
+    // The doc ID is an unguessable capability token from the quote URL.
+    // Anyone holding the link may fetch that one doc (list is denied) and
+    // may only flip the approval fields while the quote is still actionable.
+    // Only managers of the owning company create, replace, or delete mirrors.
+
+    match /public_quotes/{token} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if isManager()
+        && request.resource.data.company_id == myCompany();
+      allow delete: if isManager() && resource.data.company_id == myCompany();
+
+      allow update: if
+        // company side: managers may refresh their own mirror
+        (isManager()
+          && resource.data.company_id == myCompany()
+          && request.resource.data.company_id == resource.data.company_id)
+        ||
+        // customer side: approval fields only, one-way status transitions
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ['status', 'viewed_at', 'client_signature', 'signed_at',
+             'client_notes', 'updated_at'])
+          && resource.data.status in ['sent', 'viewed']
+          && request.resource.data.status in ['viewed', 'approved', 'rejected']);
+    }
+
+    // ---------- metadata: read-only to clients (Admin SDK writes only) ----------
+
     match /metadata/{docId} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['next_property_id'])
-        && request.resource.data.next_property_id is int;
+      allow read: if isSignedIn();
+      allow write: if false;
     }
 
-    // ============ PASSWORD RESET REQUESTS ============
-    match /password_reset_requests/{email} {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasAll(['status'])
-        && request.resource.data.status in ['pending', 'approved', 'denied'];
+    // ---------- password_reset_requests: dead — Firebase Auth handles resets ----------
+
+    match /password_reset_requests/{docId} {
+      allow read, write: if false;
     }
 
-    // Deny everything else by default (no wildcard match)
+    // ---------- default deny ----------
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

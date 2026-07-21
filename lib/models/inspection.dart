@@ -13,6 +13,7 @@ class Inspection {
   final String billingMonth; // Format: "2025-01" for January 2025
   final double laborCost; // Additional labor charges
   final double discount; // Discount amount
+  final double tax; // Tax amount
   final Map<int, List<String>> zonePhotos; // Zone number -> list of base64 photos (0 = general)
 
   Inspection({
@@ -28,6 +29,7 @@ class Inspection {
     this.billingMonth = '',
     this.laborCost = 0.0,
     this.discount = 0.0,
+    this.tax = 0.0,
     Map<int, List<String>>? zonePhotos,
   })  : otherRepairs = otherRepairs ?? [],
         zonePhotos = zonePhotos ?? {};
@@ -67,6 +69,7 @@ class Inspection {
       'billing_month': billingMonth,
       'labor_cost': laborCost,
       'discount': discount,
+      'tax': tax,
       'zone_photos': zonePhotos.map((key, value) => MapEntry(key.toString(), value)),
     };
   }
@@ -108,6 +111,7 @@ class Inspection {
       billingMonth: json['billing_month'] ?? '',
       laborCost: (json['labor_cost'] ?? 0.0).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
+      tax: (json['tax'] ?? 0.0).toDouble(),
       zonePhotos: _parseZonePhotos(json),
     );
   }
@@ -148,6 +152,7 @@ class Inspection {
     String? billingMonth,
     double? laborCost,
     double? discount,
+    double? tax,
     Map<int, List<String>>? zonePhotos,
   }) {
     return Inspection(
@@ -163,6 +168,7 @@ class Inspection {
       billingMonth: billingMonth ?? this.billingMonth,
       laborCost: laborCost ?? this.laborCost,
       discount: discount ?? this.discount,
+      tax: tax ?? this.tax,
       zonePhotos: zonePhotos ?? this.zonePhotos,
     );
   }

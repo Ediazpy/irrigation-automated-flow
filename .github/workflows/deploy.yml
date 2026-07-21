@@ -1,8 +1,11 @@
 name: Deploy to GitHub Pages
 
+# DISABLED (manual trigger only): this deployed irritrack_mobile/, the old
+# local-auth build, on every push. The production app now lives on Firebase
+# Hosting and is deployed via `firebase deploy --only hosting` after the
+# security hardening. Re-enable deliberately if GitHub Pages is still wanted.
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: write

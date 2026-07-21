@@ -1,0 +1,14 @@
+{
+  "name": "iaf-rules-tests",
+  "description": "Firestore security rules tests — run against the local emulator",
+  "private": true,
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-iaf \"mocha --timeout 20000 firestore.rules.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.10.0",
+    "firebase-tools": "^13.35.1",
+    "mocha": "^10.7.3"
+  }
+}

@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../models/quote.dart';
-import '../../models/property.dart';
-import '../../services/storage_service.dart';
+import '../../services/firestore_service.dart';
 import '../../widgets/signature_pad.dart';
 import '../../constants/status_constants.dart';
 
-/// Client-facing quote view and approval screen
-/// This screen is accessed via a unique URL token - no login required
+/// Client-facing quote view and approval screen.
+/// Accessed via a unique URL token — no login required. Reads and writes go
+/// through public_quotes/{token}: the business collections themselves are
+/// not publicly accessible, and the rules only allow the approval fields of
+/// this one document to change.
 class ClientQuoteScreen extends StatefulWidget {
-  final StorageService storage;
   final String accessToken;
 
   const ClientQuoteScreen({
     Key? key,
-    required this.storage,
     required this.accessToken,
   }) : super(key: key);
 
@@ -23,10 +23,10 @@ class ClientQuoteScreen extends StatefulWidget {
 
 class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
   Quote? _quote;
-  Property? _property;
+  String _address = '';
   final _notesController = TextEditingController();
   bool _showSignaturePad = false;
-  bool _isProcessing = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -40,19 +40,39 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
     super.dispose();
   }
 
-  void _loadQuote() {
-    _quote = widget.storage.getQuoteByAccessToken(widget.accessToken);
-    if (_quote != null) {
-      _property = widget.storage.properties[_quote!.propertyId];
+  Future<void> _loadQuote() async {
+    try {
+      final pub = await FirestoreService().getPublicQuote(widget.accessToken);
+      if (pub != null) {
+        final quoteJson = Map<String, dynamic>.from(pub['quote'] as Map? ?? {});
+        var quote = Quote.fromJson((pub['quote_id'] as num?)?.toInt() ?? 0, quoteJson);
+        // The flat fields on the public doc are the live approval state
+        quote = quote.copyWith(
+          status: pub['status'] as String? ?? quote.status,
+          viewedAt: pub['viewed_at'] as String? ?? quote.viewedAt,
+          clientSignature: pub['client_signature'] as String? ?? quote.clientSignature,
+          signedAt: pub['signed_at'] as String? ?? quote.signedAt,
+          clientNotes: pub['client_notes'] as String? ?? quote.clientNotes,
+        );
+        _quote = quote;
+        _address = pub['address'] as String? ?? '';
 
-      // Mark as viewed if first time
-      if (_quote!.viewedAt == null) {
-        _quote = _quote!.copyWith(viewedAt: DateTime.now().toIso8601String());
-        widget.storage.quotes[_quote!.id] = _quote!;
-        widget.storage.saveData();
+        // Mark as viewed on first open
+        if (_quote!.viewedAt == null &&
+            (_quote!.status == QuoteStatus.sent || _quote!.status == QuoteStatus.viewed)) {
+          final viewedAt = DateTime.now().toIso8601String();
+          _quote = _quote!.copyWith(status: QuoteStatus.viewed, viewedAt: viewedAt);
+          try {
+            await FirestoreService().updatePublicQuote(widget.accessToken, {
+              'status': QuoteStatus.viewed,
+              'viewed_at': viewedAt,
+            });
+          } catch (_) {}
+        }
       }
-    }
-    setState(() {});
+    } catch (_) {}
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _showApprovalFlow() {
@@ -68,7 +88,7 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
     setState(() => _showSignaturePad = true);
   }
 
-  void _onSignatureComplete(String signature) {
+  Future<void> _onSignatureComplete(String signature) async {
     if (_quote!.isExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -79,22 +99,38 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
       setState(() => _showSignaturePad = false);
       return;
     }
-    setState(() => _isProcessing = true);
+    final signedAt = DateTime.now().toIso8601String();
+    final notes = _notesController.text.trim().isEmpty
+        ? null
+        : _notesController.text.trim();
+
+    try {
+      await FirestoreService().updatePublicQuote(widget.accessToken, {
+        'status': QuoteStatus.approved,
+        'client_signature': signature,
+        'signed_at': signedAt,
+        'client_notes': notes,
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not submit approval. Check your connection and try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     _quote = _quote!.copyWith(
       status: QuoteStatus.approved,
       clientSignature: signature,
-      signedAt: DateTime.now().toIso8601String(),
-      clientNotes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
+      signedAt: signedAt,
+      clientNotes: notes,
     );
 
-    widget.storage.quotes[_quote!.id] = _quote!;
-    widget.storage.saveData();
-
+    if (!mounted) return;
     setState(() {
-      _isProcessing = false;
       _showSignaturePad = false;
     });
 
@@ -139,16 +175,33 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                final notes = reasonController.text.trim().isEmpty
+                    ? 'Declined by client'
+                    : reasonController.text.trim();
+
+                try {
+                  await FirestoreService().updatePublicQuote(widget.accessToken, {
+                    'status': QuoteStatus.rejected,
+                    'client_notes': notes,
+                  });
+                } catch (_) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Could not submit. Check your connection and try again.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
                 _quote = _quote!.copyWith(
                   status: QuoteStatus.rejected,
-                  clientNotes: reasonController.text.trim().isEmpty
-                      ? 'Declined by client'
-                      : reasonController.text.trim(),
+                  clientNotes: notes,
                 );
-                widget.storage.quotes[_quote!.id] = _quote!;
-                widget.storage.saveData();
 
+                if (!mounted) return;
                 Navigator.pop(context);
                 setState(() {});
 
@@ -196,6 +249,13 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Quote')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     if (_quote == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Quote')),
@@ -220,7 +280,6 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
       );
     }
 
-    final isExpired = _quote!.isExpired;
     final isActionable = _quote!.status == QuoteStatus.sent ||
         _quote!.status == QuoteStatus.viewed;
 
@@ -232,26 +291,19 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
             // Company Header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
               color: Theme.of(context).primaryColor,
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.water_drop, size: 40, color: Colors.white),
-                  const SizedBox(height: 8),
-                  Text(
-                    _quote!.companyName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Quote #${_quote!.id}',
+                  const Icon(Icons.water_drop, size: 28, color: Colors.white),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Service Quote',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 16,
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
@@ -259,27 +311,46 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
             ),
 
             // Status Banner
-            if (!isActionable || isExpired)
+            if (_quote!.status == QuoteStatus.approved)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                color: Colors.green.shade50,
+                child: Column(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green.shade700, size: 40),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Quote Approved',
+                      style: TextStyle(
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Thank you for your approval! We will be in touch to schedule your service.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.green.shade700, fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else if (_quote!.status == QuoteStatus.rejected)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                color: isExpired
-                    ? Colors.orange.shade100
-                    : QuoteStatus.getColor(_quote!.status).withOpacity(0.1),
+                color: Colors.red.shade50,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      isExpired ? Icons.timer_off : QuoteStatus.getIcon(_quote!.status),
-                      color: isExpired ? Colors.orange : QuoteStatus.getColor(_quote!.status),
-                    ),
+                    Icon(Icons.cancel, color: Colors.red.shade700),
                     const SizedBox(width: 8),
                     Text(
-                      isExpired
-                          ? 'This quote has expired'
-                          : 'Quote ${QuoteStatus.getDisplayName(_quote!.status)}',
+                      'Quote Declined',
                       style: TextStyle(
-                        color: isExpired ? Colors.orange.shade900 : QuoteStatus.getColor(_quote!.status),
+                        color: Colors.red.shade800,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -291,7 +362,7 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
             Expanded(
               child: _showSignaturePad
                   ? _buildSignatureSection()
-                  : _buildQuoteContent(isActionable && !isExpired),
+                  : _buildQuoteContent(isActionable),
             ),
           ],
         ),
@@ -325,7 +396,7 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _property?.address ?? 'Unknown',
+                        _address.isEmpty ? 'Unknown' : _address,
                         style: const TextStyle(fontSize: 16),
                       ),
                     ),
@@ -382,6 +453,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
                       _totalRow('Labor', _quote!.laborCost),
                     if (_quote!.discount > 0)
                       _totalRow('Discount', -_quote!.discount),
+                    if (_quote!.tax > 0)
+                      _totalRow('Tax', _quote!.tax),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -410,36 +483,6 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Expiration Notice
-        if (_quote!.expiresAt != null && showActions)
-          Card(
-            color: _quote!.daysUntilExpiry <= 3
-                ? Colors.orange.shade50
-                : Colors.blue.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.timer,
-                    color: _quote!.daysUntilExpiry <= 3
-                        ? Colors.orange
-                        : Colors.blue,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Quote valid for ${_quote!.daysUntilExpiry} more days',
-                    style: TextStyle(
-                      color: _quote!.daysUntilExpiry <= 3
-                          ? Colors.orange.shade900
-                          : Colors.blue.shade900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
 
         // Terms and Conditions
         ExpansionTile(

@@ -60,34 +60,59 @@ class _DoRepairTaskScreenState extends State<DoRepairTaskScreen> {
   }
 
   void _completeTask() {
-    // Confirm all items are done
-    if (_completedItems.length < _task.repairs.length) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Incomplete Items'),
-          content: Text(
-            '${_task.repairs.length - _completedItems.length} items are not marked complete. '
-            'Are you sure you want to finish this task?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Go Back'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _finishTask();
-              },
-              child: const Text('Complete Anyway'),
+    final remaining = _task.repairs.length - _completedItems.length;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Finish Task'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                '${_completedItems.length} of ${_task.repairs.length} items marked complete.'),
+            if (remaining > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                '$remaining item${remaining == 1 ? '' : 's'} still open.',
+                style: const TextStyle(color: Colors.orange),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              'Complete the task, or keep it open so your manager can '
+              'reschedule the remaining work for another day.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
           ],
         ),
-      );
-    } else {
-      _finishTask();
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Go Back'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _keepOpen();
+            },
+            child: const Text('Keep Open'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _finishTask();
+            },
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _finishTask() {
@@ -108,6 +133,30 @@ class _DoRepairTaskScreenState extends State<DoRepairTaskScreen> {
       const SnackBar(
         content: Text('Task completed successfully!'),
         backgroundColor: Colors.green,
+      ),
+    );
+
+    Navigator.pop(context, true);
+  }
+
+  /// Return the task to the manager's queue for rescheduling.
+  void _keepOpen() {
+    final storage = widget.authService.storage;
+
+    _task = _task.copyWith(
+      status: RepairTaskStatus.pending,
+      completionNotes: _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
+    );
+
+    storage.repairTasks[_task.id] = _task;
+    storage.saveData();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Task kept open — your manager can reschedule it.'),
+        backgroundColor: Colors.blue,
       ),
     );
 

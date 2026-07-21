@@ -367,14 +367,24 @@ class PdfService {
 
   /// Show PDF preview and print dialog
   static Future<void> previewAndPrint(Uint8List pdfBytes, String title) async {
-    await Printing.layoutPdf(
-      onLayout: (format) => pdfBytes,
-      name: title,
-    );
+    try {
+      await Printing.layoutPdf(
+        onLayout: (format) => pdfBytes,
+        name: title,
+      );
+    } catch (e) {
+      print('Error printing PDF: $e');
+      rethrow;
+    }
   }
 
   /// Share/save PDF
   static Future<void> sharePdf(Uint8List pdfBytes, String filename) async {
-    await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+    try {
+      await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+    } catch (e) {
+      print('Error sharing PDF: $e');
+      rethrow;
+    }
   }
 }

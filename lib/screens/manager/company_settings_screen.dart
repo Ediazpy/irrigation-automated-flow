@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../models/company_settings.dart';
-import '../../models/user.dart';
-import '../../utils/password_hash.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   final AuthService authService;
@@ -21,9 +19,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   late TextEditingController _addressController;
   late TextEditingController _termsController;
   late TextEditingController _footerController;
-  late int _expirationDays;
   late bool _photosRequired;
-  late TextEditingController _masterResetCodeController;
   bool _isSyncing = false;
 
   @override
@@ -38,13 +34,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         text: settings?.defaultTermsAndConditions ?? CompanySettings.defaultTerms);
     _footerController = TextEditingController(
         text: settings?.defaultFooterMessage ?? 'Thank you for your business!');
-    _expirationDays = settings?.quoteExpirationDays ?? 30;
     _photosRequired = settings?.photosRequired ?? false;
-    // Don't display the hashed master code — show empty field for re-entry
-    final existingCode = settings?.masterResetCode ?? '';
-    _masterResetCodeController = TextEditingController(
-      text: PasswordHash.isHashed(existingCode) ? '' : existingCode,
-    );
   }
 
   @override
@@ -55,27 +45,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     _addressController.dispose();
     _termsController.dispose();
     _footerController.dispose();
-    _masterResetCodeController.dispose();
     super.dispose();
   }
 
   void _saveSettings() {
     if (!_formKey.currentState!.validate()) return;
-
-    // Hash the master reset code if it has been set/changed
-    final rawCode = _masterResetCodeController.text.trim();
-    final existingCode = widget.authService.storage.companySettings?.masterResetCode ?? '';
-    String hashedCode;
-    if (rawCode.isEmpty) {
-      // User left field empty — keep existing hashed code
-      hashedCode = existingCode;
-    } else if (PasswordHash.isHashed(rawCode)) {
-      // Already hashed (shouldn't normally happen)
-      hashedCode = rawCode;
-    } else {
-      // New plaintext code — hash it
-      hashedCode = PasswordHash.hashPassword(rawCode);
-    }
 
     final settings = CompanySettings(
       companyName: _nameController.text.trim(),
@@ -83,10 +57,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       companyEmail: _emailController.text.trim(),
       companyAddress: _addressController.text.trim(),
       defaultTermsAndConditions: _termsController.text.trim(),
-      quoteExpirationDays: _expirationDays,
+      quoteExpirationDays: 30,
       defaultFooterMessage: _footerController.text.trim(),
       photosRequired: _photosRequired,
-      masterResetCode: hashedCode,
     );
 
     widget.authService.storage.companySettings = settings;
@@ -182,32 +155,6 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             // Quote Settings Section
             _buildSectionHeader('Quote Settings', Icons.receipt_long),
             const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.timer),
-                title: const Text('Quote Expiration'),
-                subtitle: Text('$_expirationDays days'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: _expirationDays > 7
-                          ? () => setState(() => _expirationDays--)
-                          : null,
-                    ),
-                    Text('$_expirationDays'),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: _expirationDays < 90
-                          ? () => setState(() => _expirationDays++)
-                          : null,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
             TextFormField(
               controller: _footerController,
               decoration: const InputDecoration(
@@ -274,40 +221,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
             const SizedBox(height: 32),
 
-            // Security Questions Section
-            _buildSectionHeader('Security Questions', Icons.security),
-            const SizedBox(height: 8),
-            Text(
-              'Set up security questions to allow password reset if locked out.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            _buildSecurityQuestionsCard(),
-
-            const SizedBox(height: 32),
-
-            // Master Reset Code Section
-            _buildSectionHeader('Master Reset Code', Icons.vpn_key),
-            const SizedBox(height: 8),
-            Text(
-              'Set a master code that can be used to reset a locked-out admin account. Share this code only with your dev team or trusted support.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _masterResetCodeController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Master Reset Code',
-                prefixIcon: const Icon(Icons.vpn_key),
-                hintText: PasswordHash.isHashed(widget.authService.storage.companySettings?.masterResetCode ?? '')
-                    ? 'Code is set (enter new code to change)'
-                    : 'Enter a secure code (e.g. 6+ characters)',
-                helperText: 'Stored securely as a hash. Leave blank to keep existing code.',
-              ),
-            ),
-
-            const SizedBox(height: 32),
+            // Password resets are handled by Firebase Auth ("Forgot Password"
+            // on the login screen) — no master codes or security questions.
 
             // Save Button
             ElevatedButton.icon(
@@ -325,173 +240,6 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         ),
       ),
       ),
-      ),
-    );
-  }
-
-  Widget _buildSecurityQuestionsCard() {
-    final currentUser = widget.authService.currentUser;
-    final hasQuestions = currentUser?.hasSecurityQuestions() ?? false;
-
-    return Card(
-      child: ListTile(
-        leading: Icon(
-          hasQuestions ? Icons.check_circle : Icons.warning,
-          color: hasQuestions ? Colors.green : Colors.orange,
-        ),
-        title: Text(hasQuestions ? 'Security Questions Set' : 'Security Questions Not Set'),
-        subtitle: Text(
-          hasQuestions
-              ? 'You can reset your password using security questions'
-              : 'Set up questions to enable password reset',
-        ),
-        trailing: ElevatedButton(
-          onPressed: _setupSecurityQuestions,
-          child: Text(hasQuestions ? 'Update' : 'Set Up'),
-        ),
-      ),
-    );
-  }
-
-  void _setupSecurityQuestions() {
-    final currentUser = widget.authService.currentUser;
-    if (currentUser == null) return;
-
-    // Controllers for answers
-    final controllers = <String, TextEditingController>{};
-    for (var q in User.securityQuestions) {
-      controllers[q['id']!] = TextEditingController(
-        text: currentUser.securityAnswers[q['id']] ?? '',
-      );
-    }
-
-    // Track selected questions
-    Set<String> selectedQuestions = Set.from(currentUser.securityAnswers.keys);
-    if (selectedQuestions.length < 3) {
-      // Pre-select first 3 if none selected
-      selectedQuestions = User.securityQuestions.take(3).map((q) => q['id']!).toSet();
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Security Questions'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select and answer at least 3 questions:',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                  ...User.securityQuestions.map((q) {
-                    final id = q['id']!;
-                    final question = q['question']!;
-                    final isSelected = selectedQuestions.contains(id);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: isSelected,
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    if (value == true) {
-                                      selectedQuestions.add(id);
-                                    } else {
-                                      selectedQuestions.remove(id);
-                                      controllers[id]!.clear();
-                                    }
-                                  });
-                                },
-                              ),
-                              Expanded(
-                                child: Text(
-                                  question,
-                                  style: TextStyle(
-                                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                                    color: isSelected ? null : Colors.grey,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (isSelected)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 48),
-                              child: TextField(
-                                controller: controllers[id],
-                                decoration: const InputDecoration(
-                                  hintText: 'Your answer',
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // Validate at least 3 questions answered, hash answers
-                final answers = <String, String>{};
-                for (var id in selectedQuestions) {
-                  final answer = controllers[id]!.text.trim();
-                  if (answer.isNotEmpty) {
-                    // Hash the answer (lowercase for case-insensitive comparison)
-                    answers[id] = PasswordHash.hashPassword(answer.toLowerCase());
-                  }
-                }
-
-                if (answers.length < 3) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please answer at least 3 questions'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                // Save answers
-                final storage = widget.authService.storage;
-                storage.users[currentUser.email] = currentUser.copyWith(
-                  securityAnswers: answers,
-                );
-                storage.saveData();
-
-                Navigator.pop(context);
-                setState(() {}); // Refresh the card
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Security questions saved'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
       ),
     );
   }

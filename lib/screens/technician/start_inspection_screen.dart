@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import 'do_inspection_screen.dart';
 
-class StartInspectionScreen extends StatelessWidget {
+class StartInspectionScreen extends StatefulWidget {
   final AuthService authService;
 
   const StartInspectionScreen({Key? key, required this.authService}) : super(key: key);
 
   @override
+  State<StartInspectionScreen> createState() => _StartInspectionScreenState();
+}
+
+class _StartInspectionScreenState extends State<StartInspectionScreen> {
+  @override
   Widget build(BuildContext context) {
-    final storage = authService.storage;
-    final myEmail = authService.currentUser?.email;
+    final storage = widget.authService.storage;
+    final myEmail = widget.authService.currentUser?.email;
     final myInspections = storage.inspections.entries
         .where((e) => e.value.technicians.contains(myEmail) && e.value.status != 'completed')
         .toList();
@@ -41,11 +46,13 @@ class StartInspectionScreen extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => DoInspectionScreen(
-                            authService: authService,
+                            authService: widget.authService,
                             inspectionId: entry.key,
                           ),
                         ),
-                      );
+                      ).then((_) {
+                        if (mounted) setState(() {});
+                      });
                     },
                   ),
                 );

@@ -1,5 +1,6 @@
 import 'zone.dart';
 import 'controller.dart';
+import '../constants/status_constants.dart';
 
 class Property {
   final int id;
@@ -16,9 +17,12 @@ class Property {
   // New fields for workflow improvements
   final String notes; // Gate codes, special instructions, problem areas
   final int billingCycleDay; // Day of month billing cycle starts (1-28)
-  final String clientName;
-  final String clientEmail;
-  final String clientPhone;
+  final String inspectionFrequency; // 'monthly' | 'quarterly' | 'semiannual' | 'one_time'
+  final String? lastScheduledMonth; // 'yyyy-MM' the scheduler last generated for
+  final int? clientId; // Link to Client record
+  final String clientName; // Legacy / fallback
+  final String clientEmail; // Legacy / fallback
+  final String clientPhone; // Legacy / fallback
 
   Property({
     required this.id,
@@ -33,6 +37,9 @@ class Property {
     this.controllers = const [],
     this.notes = '',
     this.billingCycleDay = 1,
+    this.inspectionFrequency = InspectionFrequency.monthly,
+    this.lastScheduledMonth,
+    this.clientId,
     this.clientName = '',
     this.clientEmail = '',
     this.clientPhone = '',
@@ -75,6 +82,9 @@ class Property {
       'controllers': controllers.map((c) => c.toJson()).toList(),
       'notes': notes,
       'billing_cycle_day': billingCycleDay,
+      'inspection_frequency': inspectionFrequency,
+      'last_scheduled_month': lastScheduledMonth,
+      'client_id': clientId,
       'client_name': clientName,
       'client_email': clientEmail,
       'client_phone': clientPhone,
@@ -109,6 +119,10 @@ class Property {
       controllers: controllersList,
       notes: json['notes'] ?? '',
       billingCycleDay: json['billing_cycle_day'] ?? 1,
+      inspectionFrequency:
+          json['inspection_frequency'] ?? InspectionFrequency.monthly,
+      lastScheduledMonth: json['last_scheduled_month'],
+      clientId: json['client_id'],
       clientName: json['client_name'] ?? '',
       clientEmail: json['client_email'] ?? '',
       clientPhone: json['client_phone'] ?? '',
@@ -128,6 +142,9 @@ class Property {
     List<Controller>? controllers,
     String? notes,
     int? billingCycleDay,
+    String? inspectionFrequency,
+    String? lastScheduledMonth,
+    int? clientId,
     String? clientName,
     String? clientEmail,
     String? clientPhone,
@@ -145,6 +162,9 @@ class Property {
       controllers: controllers ?? this.controllers,
       notes: notes ?? this.notes,
       billingCycleDay: billingCycleDay ?? this.billingCycleDay,
+      inspectionFrequency: inspectionFrequency ?? this.inspectionFrequency,
+      lastScheduledMonth: lastScheduledMonth ?? this.lastScheduledMonth,
+      clientId: clientId ?? this.clientId,
       clientName: clientName ?? this.clientName,
       clientEmail: clientEmail ?? this.clientEmail,
       clientPhone: clientPhone ?? this.clientPhone,

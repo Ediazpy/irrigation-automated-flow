@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../services/auth_service.dart';
 import '../../models/user.dart';
 
@@ -428,7 +429,7 @@ class _UsersScreenState extends State<UsersScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 // Normalize email to lowercase for consistent checking
                 final email = emailController.text.trim().toLowerCase();
                 final name = nameController.text.trim();
@@ -464,6 +465,22 @@ class _UsersScreenState extends State<UsersScreen> {
                   return;
                 }
 
+                // Register in Firebase Auth so email password reset works
+                try {
+                  await fb.FirebaseAuth.instance.createUserWithEmailAndPassword(
+                    email: email,
+                    password: password,
+                  );
+                } on fb.FirebaseAuthException catch (e) {
+                  if (e.code != 'email-already-in-use') {
+                    // Non-fatal: user still gets created in local storage
+                  }
+                } catch (_) {
+                  // Non-fatal
+                }
+
+                if (!context.mounted) return;
+
                 setState(() {
                   widget.authService.storage.users[email] = User(
                     email: email,
@@ -473,9 +490,10 @@ class _UsersScreenState extends State<UsersScreen> {
                   );
                 });
                 widget.authService.storage.saveData();
-                Navigator.pop(context);
 
-                ScaffoldMessenger.of(context).showSnackBar(
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(context);
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text('User $name created'),
                     backgroundColor: Colors.green,

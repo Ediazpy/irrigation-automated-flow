@@ -1,33 +1,33 @@
 rules_version = '2';
 
-// IrriTrack Firebase Storage Security Rules
+// IAF Firebase Storage Security Rules
 // Deploy via: firebase deploy --only storage
+//
+// Same posture as Firestore: default deny, signed-in access only.
+// (Photos and signatures are currently stored inline in Firestore documents;
+// these rules cover any future use of Storage buckets.)
 
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // ============ TEST MODE (Current) ============
-    // Allow all reads/writes while using local auth
-    // IMPORTANT: Replace with production rules before public release
-    match /{allPaths=**} {
-      allow read, write: if true;
+    // Inspection photos — signed-in users only, size/type limited
+    match /inspections/{inspectionId}/photos/{photoId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024  // Max 5MB per photo
+        && request.resource.contentType.matches('image/.*');
     }
 
-    // ============ PRODUCTION RULES (Uncomment when Firebase Auth is added) ============
-    //
-    // // Inspection photos - authenticated users can upload, all can read
-    // match /inspections/{inspectionId}/photos/{photoId} {
-    //   allow read: if request.auth != null;
-    //   allow write: if request.auth != null
-    //     && request.resource.size < 5 * 1024 * 1024  // Max 5MB per photo
-    //     && request.resource.contentType.matches('image/.*');
-    // }
-    //
-    // // Quote signatures - managers can read, clients can write via token
-    // match /signatures/{quoteId}/{signatureId} {
-    //   allow read: if request.auth != null;
-    //   allow write: if request.auth != null
-    //     && request.resource.size < 1 * 1024 * 1024;  // Max 1MB per signature
-    // }
+    // Quote signatures — signed-in users only
+    match /signatures/{quoteId}/{signatureId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 1 * 1024 * 1024;  // Max 1MB per signature
+    }
+
+    // Default deny — anything not matched above is refused
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }

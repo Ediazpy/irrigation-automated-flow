@@ -347,8 +347,9 @@ class _BulkScheduleScreenState extends State<BulkScheduleScreen> {
   void _editGroupTechs(int groupIndex) {
     final group = groups[groupIndex];
     final storage = widget.authService.storage;
+    // Any active employee can be assigned, not just technicians
     final technicians = storage.users.entries
-        .where((e) => e.value.role == 'technician' && !e.value.isArchived)
+        .where((e) => !e.value.isArchived)
         .toList();
 
     final tempSelected = Set<String>.from(group.techEmails);

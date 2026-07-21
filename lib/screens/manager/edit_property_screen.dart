@@ -3,6 +3,8 @@ import '../../services/auth_service.dart';
 import '../../models/property.dart';
 import '../../models/zone.dart';
 import '../../models/controller.dart';
+import '../../constants/status_constants.dart';
+import '../../widgets/address_autocomplete_field.dart';
 
 class EditPropertyScreen extends StatefulWidget {
   final AuthService authService;
@@ -38,10 +40,12 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
   late List<Zone> zones;
   late List<Controller> controllers;
   int _selectedControllerIndex = 0;
+  late String _inspectionFrequency;
 
   @override
   void initState() {
     super.initState();
+    _inspectionFrequency = widget.property.inspectionFrequency;
     // Initialize with existing property data
     _addressController = TextEditingController(text: widget.property.address);
     _meterController = TextEditingController(text: widget.property.meterLocation);
@@ -496,6 +500,9 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
       controllers: controllers,
       notes: _notesController.text,
       billingCycleDay: billingDay,
+      inspectionFrequency: _inspectionFrequency,
+      lastScheduledMonth: widget.property.lastScheduledMonth,
+      clientId: widget.property.clientId,
       clientName: _clientNameController.text,
       clientEmail: _clientEmailController.text,
       clientPhone: _clientPhoneController.text,
@@ -531,13 +538,30 @@ class _EditPropertyScreenState extends State<EditPropertyScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextFormField(
+            AddressAutocompleteField(
               controller: _addressController,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                border: OutlineInputBorder(),
-              ),
+              labelText: 'Address',
               validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+            // How often this property should land on the schedule
+            DropdownButtonFormField<String>(
+              value: _inspectionFrequency,
+              decoration: const InputDecoration(
+                labelText: 'Inspection Schedule',
+                prefixIcon: Icon(Icons.event_repeat),
+                border: OutlineInputBorder(),
+                helperText:
+                    'Recurring properties are added to your "To Schedule" list automatically',
+              ),
+              items: InspectionFrequency.all
+                  .map((f) => DropdownMenuItem(
+                        value: f,
+                        child: Text(InspectionFrequency.getDisplayName(f)),
+                      ))
+                  .toList(),
+              onChanged: (v) =>
+                  setState(() => _inspectionFrequency = v ?? _inspectionFrequency),
             ),
             const SizedBox(height: 16),
             TextFormField(

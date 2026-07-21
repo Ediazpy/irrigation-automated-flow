@@ -26,8 +26,6 @@ class ScheduleRepairScreen extends StatefulWidget {
 class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   List<String> _selectedTechnicians = [];
-  String _priority = TaskPriority.normal;
-  double _estimatedHours = 2.0;
   final _notesController = TextEditingController();
 
   @override
@@ -36,11 +34,26 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
     super.dispose();
   }
 
+  // Any active employee can be assigned, not just technicians
   List<Map<String, dynamic>> get _availableTechnicians {
     return widget.authService.storage.users.values
-        .where((user) => user.role == 'technician' && !user.isArchived)
+        .where((user) => !user.isArchived)
         .map((user) => {'email': user.email, 'name': user.name})
         .toList();
+  }
+
+  /// A repair that already has an open task must not be scheduled twice.
+  RepairTask? get _existingTask {
+    try {
+      return widget.authService.storage.repairTasks.values.firstWhere(
+        (t) =>
+            t.quoteId == widget.quote.id &&
+            t.status != RepairTaskStatus.cancelled &&
+            t.status != RepairTaskStatus.completed,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   void _selectDate() async {
@@ -57,10 +70,20 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
   }
 
   void _createTask() {
+    if (_existingTask != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'These repairs are already scheduled for ${_existingTask!.scheduledDate}.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (_selectedTechnicians.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please assign at least one technician'),
+          content: Text('Please assign at least one team member'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -89,8 +112,6 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
       assignedTechnicians: _selectedTechnicians,
       scheduledDate: DateFormat('MM/dd/yyyy').format(_selectedDate),
       status: RepairTaskStatus.assigned,
-      estimatedHours: _estimatedHours,
-      priority: _priority,
       technicianNotes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -113,6 +134,8 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final existing = _existingTask;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Schedule Repairs'),
@@ -160,7 +183,31 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // Already scheduled? Make it impossible to miss.
+          if (existing != null) ...[
+            Card(
+              color: Colors.orange.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_busy, color: Colors.orange.shade800),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Already scheduled for ${existing.scheduledDate}. '
+                        'Cancel or complete that task before scheduling again.',
+                        style: TextStyle(color: Colors.orange.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // Schedule Date
           const Text(
@@ -192,9 +239,9 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Assign Technicians
+          // Assign Team Members
           const Text(
-            'Assign Technicians',
+            'Assign Team Members',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
@@ -207,7 +254,7 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
                     Icon(Icons.warning, color: Colors.orange.shade700),
                     const SizedBox(width: 12),
                     const Expanded(
-                      child: Text('No technicians available. Add technicians in User Management.'),
+                      child: Text('No team members available. Add users in User Management.'),
                     ),
                   ],
                 ),
@@ -245,61 +292,6 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
             }),
           const SizedBox(height: 24),
 
-          // Priority
-          const Text(
-            'Priority',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              _priorityChip(TaskPriority.low, 'Low', Colors.grey),
-              _priorityChip(TaskPriority.normal, 'Normal', Colors.blue),
-              _priorityChip(TaskPriority.high, 'High', Colors.orange),
-              _priorityChip(TaskPriority.urgent, 'Urgent', Colors.red),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Estimated Hours
-          const Text(
-            'Estimated Hours',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: _estimatedHours > 0.5
-                    ? () => setState(() => _estimatedHours -= 0.5)
-                    : null,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${_estimatedHours.toStringAsFixed(1)} hrs',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: _estimatedHours < 12
-                    ? () => setState(() => _estimatedHours += 0.5)
-                    : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
           // Notes for Technician
           const Text(
             'Notes for Technician',
@@ -318,9 +310,9 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
 
           // Create Task Button
           ElevatedButton.icon(
-            onPressed: _createTask,
+            onPressed: existing != null ? null : _createTask,
             icon: const Icon(Icons.check),
-            label: const Text('Create Repair Task'),
+            label: Text(existing != null ? 'Already Scheduled' : 'Create Repair Task'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.all(16),
               backgroundColor: Theme.of(context).primaryColor,
@@ -328,29 +320,6 @@ class _ScheduleRepairScreenState extends State<ScheduleRepairScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _priorityChip(String value, String label, Color color) {
-    final isSelected = _priority == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        if (selected) {
-          setState(() => _priority = value);
-        }
-      },
-      selectedColor: color.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color: isSelected ? color : Colors.grey.shade700,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      ),
-      avatar: Icon(
-        TaskPriority.getIcon(value),
-        size: 18,
-        color: isSelected ? color : Colors.grey,
       ),
     );
   }

@@ -7,6 +7,8 @@ import '../models/inspection.dart';
 import '../models/repair_item.dart';
 import '../models/quote.dart';
 import '../models/repair_task.dart';
+import '../models/client.dart';
+import '../models/invoice.dart';
 import '../models/company_settings.dart';
 import 'firestore_service.dart';
 
@@ -21,15 +23,18 @@ class StorageService {
   Map<int, Property> properties = {};
   Map<int, Inspection> inspections = {};
   Map<String, RepairItem> repairItems = {};
-  Map<String, int> failedAttempts = {};
   Map<int, Quote> quotes = {};
   Map<int, RepairTask> repairTasks = {};
+  Map<int, Client> clients = {};
+  Map<int, Invoice> invoices = {};
   CompanySettings? companySettings;
 
   int nextPropertyId = 1;
   int nextInspectionId = 1;
   int nextQuoteId = 1;
   int nextRepairTaskId = 1;
+  int nextClientId = 1;
+  int nextInvoiceId = 1;
 
   // Firestore sync - enabled by default (auto-sync)
   bool _firestoreSyncEnabled = true; // Default to true for automatic sync
@@ -133,14 +138,18 @@ class StorageService {
         'properties': properties.map((key, value) => MapEntry(key.toString(), value.toJson())),
         'inspections': inspections.map((key, value) => MapEntry(key.toString(), value.toJson())),
         'repair_items': repairItems.map((key, value) => MapEntry(key, value.toJson())),
-        'failed_attempts': failedAttempts,
+        'doc_stamps': _firestoreService.stampCache,
         'quotes': quotes.map((key, value) => MapEntry(key.toString(), value.toJson())),
         'repair_tasks': repairTasks.map((key, value) => MapEntry(key.toString(), value.toJson())),
+        'clients': clients.map((key, value) => MapEntry(key.toString(), value.toJson())),
+        'invoices': invoices.map((key, value) => MapEntry(key.toString(), value.toJson())),
         'company_settings': companySettings?.toJson(),
         'next_property_id': nextPropertyId,
         'next_inspection_id': nextInspectionId,
         'next_quote_id': nextQuoteId,
         'next_repair_task_id': nextRepairTaskId,
+        'next_client_id': nextClientId,
+        'next_invoice_id': nextInvoiceId,
       };
 
       final jsonString = json.encode(data);
@@ -171,19 +180,26 @@ class StorageService {
         inspections: inspections,
         quotes: quotes,
         repairTasks: repairTasks,
+        clients: clients,
+        invoices: invoices,
         companySettings: companySettings,
         nextPropertyId: nextPropertyId,
         nextInspectionId: nextInspectionId,
         nextQuoteId: nextQuoteId,
         nextRepairTaskId: nextRepairTaskId,
+        nextClientId: nextClientId,
+        nextInvoiceId: nextInvoiceId,
       );
     } catch (e) {
       print('Error syncing to Firestore: $e');
     }
   }
 
-  /// Download all data from Firestore and replace local data
+  /// Download all data from Firestore and replace local data.
+  /// Requires a signed-in Firebase Auth user — the security rules deny
+  /// all unauthenticated reads.
   Future<bool> downloadFromFirestore() async {
+    if (!_firestoreService.isSignedIn) return false;
     try {
       final data = await _firestoreService.downloadAllData();
 
@@ -192,6 +208,8 @@ class StorageService {
       inspections = data['inspections'] as Map<int, Inspection>;
       quotes = data['quotes'] as Map<int, Quote>;
       repairTasks = data['repair_tasks'] as Map<int, RepairTask>;
+      clients = data['clients'] as Map<int, Client>;
+      invoices = data['invoices'] as Map<int, Invoice>;
       companySettings = data['company_settings'] as CompanySettings?;
 
       final metadata = data['metadata'] as Map<String, int>;
@@ -199,6 +217,8 @@ class StorageService {
       nextInspectionId = metadata['next_inspection_id'] ?? 1;
       nextQuoteId = metadata['next_quote_id'] ?? 1;
       nextRepairTaskId = metadata['next_repair_task_id'] ?? 1;
+      nextClientId = metadata['next_client_id'] ?? 1;
+      nextInvoiceId = metadata['next_invoice_id'] ?? 1;
 
       // Save to local storage
       await saveData();
@@ -275,11 +295,11 @@ class StorageService {
         });
       }
 
-      // Load failed attempts
-      if (data['failed_attempts'] != null) {
-        failedAttempts.clear();
-        (data['failed_attempts'] as Map<String, dynamic>).forEach((key, value) {
-          failedAttempts[key] = value as int;
+      // Restore ownership stamps so sync writes preserve created_by/created_at
+      if (data['doc_stamps'] != null) {
+        (data['doc_stamps'] as Map<String, dynamic>).forEach((key, value) {
+          _firestoreService.stampCache[key] =
+              Map<String, dynamic>.from(value as Map);
         });
       }
 
@@ -299,6 +319,22 @@ class StorageService {
         });
       }
 
+      // Load clients
+      if (data['clients'] != null) {
+        clients.clear();
+        (data['clients'] as Map<String, dynamic>).forEach((key, value) {
+          clients[int.parse(key)] = Client.fromJson(int.parse(key), value as Map<String, dynamic>);
+        });
+      }
+
+      // Load invoices
+      if (data['invoices'] != null) {
+        invoices.clear();
+        (data['invoices'] as Map<String, dynamic>).forEach((key, value) {
+          invoices[int.parse(key)] = Invoice.fromJson(int.parse(key), value as Map<String, dynamic>);
+        });
+      }
+
       // Load company settings
       if (data['company_settings'] != null) {
         companySettings = CompanySettings.fromJson(data['company_settings'] as Map<String, dynamic>);
@@ -309,6 +345,8 @@ class StorageService {
       nextInspectionId = data['next_inspection_id'] ?? 1;
       nextQuoteId = data['next_quote_id'] ?? 1;
       nextRepairTaskId = data['next_repair_task_id'] ?? 1;
+      nextClientId = data['next_client_id'] ?? 1;
+      nextInvoiceId = data['next_invoice_id'] ?? 1;
 
     } catch (e) {
       print('Error loading data: $e');
@@ -387,5 +425,93 @@ class StorageService {
     return users.values
         .where((u) => u.role == 'technician' && !u.isArchived)
         .toList();
+  }
+
+  // Client helper methods
+  List<Client> getActiveClients() {
+    return clients.values.where((c) => !c.isArchived).toList()
+      ..sort((a, b) => a.lastName.compareTo(b.lastName));
+  }
+
+  List<Client> getArchivedClients() {
+    return clients.values.where((c) => c.isArchived).toList()
+      ..sort((a, b) => a.lastName.compareTo(b.lastName));
+  }
+
+  List<Property> getPropertiesForClient(int clientId) {
+    return properties.values.where((p) => p.clientId == clientId).toList();
+  }
+
+  List<Quote> getQuotesForClient(int clientId) {
+    final clientPropertyIds = getPropertiesForClient(clientId).map((p) => p.id).toSet();
+    return quotes.values.where((q) => clientPropertyIds.contains(q.propertyId)).toList();
+  }
+
+  List<Invoice> getInvoicesForClient(int clientId) {
+    return invoices.values.where((i) => i.clientId == clientId).toList();
+  }
+
+  Client? getClientForProperty(Property property) {
+    if (property.clientId != null) {
+      return clients[property.clientId];
+    }
+    return null;
+  }
+
+  // Invoice helper methods
+  List<Invoice> getInvoicesByStatus(String status) {
+    return invoices.values.where((i) => i.status == status).toList();
+  }
+
+  List<Invoice> getUnpaidInvoices() {
+    return invoices.values
+        .where((i) => i.status != 'paid' && i.status != 'void')
+        .toList();
+  }
+
+  double getTotalOutstanding() {
+    return getUnpaidInvoices().fold(0.0, (sum, inv) => sum + inv.balanceDue);
+  }
+
+  /// Auto-migrate existing property client data into Client records
+  void migratePropertyClientsToClientRecords() {
+    // Group properties by client email or name to avoid duplicates
+    final seen = <String, int>{}; // email/name -> clientId
+
+    for (var entry in properties.entries) {
+      final prop = entry.value;
+      if (prop.clientId != null) continue; // Already linked
+      if (prop.clientName.isEmpty && prop.clientEmail.isEmpty) continue; // No client data
+
+      final key = prop.clientEmail.isNotEmpty
+          ? prop.clientEmail.toLowerCase()
+          : prop.clientName.toLowerCase();
+
+      int clientId;
+      if (seen.containsKey(key)) {
+        clientId = seen[key]!;
+      } else {
+        // Split clientName into first/last
+        final parts = prop.clientName.split(' ');
+        final firstName = parts.isNotEmpty ? parts.first : '';
+        final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+        final client = Client(
+          id: nextClientId,
+          firstName: firstName,
+          lastName: lastName,
+          email: prop.clientEmail,
+          phone: prop.clientPhone,
+          createdAt: DateTime.now().toIso8601String(),
+        );
+        clients[nextClientId] = client;
+        clientId = nextClientId;
+        seen[key] = clientId;
+        nextClientId++;
+      }
+
+      // Link property to client
+      properties[entry.key] = prop.copyWith(clientId: clientId);
+    }
   }
 }

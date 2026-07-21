@@ -26,6 +26,12 @@ dependencies:
   # URL launching (for email/SMS links)
   url_launcher: ^6.2.1
 
+  # Address autocomplete lookups (OpenStreetMap Nominatim)
+  http: ^1.2.0
+
+  # Professional typography
+  google_fonts: ^6.1.0
+
   # Camera/gallery photo picker
   image_picker: ^1.0.7
 
@@ -34,6 +40,7 @@ dependencies:
   cloud_firestore: ^5.6.1
   firebase_storage: ^12.4.1
   firebase_auth: ^5.4.1
+  cloud_functions: ^5.2.0
 
 dev_dependencies:
   flutter_test:

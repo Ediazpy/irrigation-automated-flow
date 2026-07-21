@@ -29,8 +29,10 @@ class _ReviewInspectionDetailScreenState
   late List<Repair> zoneRepairs;
   late List<Repair> otherRepairs;
   late String otherNotes;
-  final _laborCostController = TextEditingController(text: '0.00');
   final _discountController = TextEditingController(text: '0.00');
+  final _taxController = TextEditingController(text: '0.00');
+  final _discountPercentController = TextEditingController();
+  final _taxPercentController = TextEditingController();
 
   @override
   void initState() {
@@ -38,27 +40,50 @@ class _ReviewInspectionDetailScreenState
     zoneRepairs = List.from(widget.inspection.repairs);
     otherRepairs = List.from(widget.inspection.otherRepairs);
     otherNotes = widget.inspection.otherNotes;
-    _laborCostController.text =
-        widget.inspection.laborCost.toStringAsFixed(2);
     _discountController.text =
         widget.inspection.discount.toStringAsFixed(2);
+    _taxController.text =
+        widget.inspection.tax.toStringAsFixed(2);
   }
 
   @override
   void dispose() {
-    _laborCostController.dispose();
     _discountController.dispose();
+    _taxController.dispose();
+    _discountPercentController.dispose();
+    _taxPercentController.dispose();
     super.dispose();
-  }
-
-  double get _laborCost {
-    final val = double.tryParse(_laborCostController.text) ?? 0.0;
-    return val < 0 ? 0.0 : val;
   }
 
   double get _discount {
     final val = double.tryParse(_discountController.text) ?? 0.0;
     return val < 0 ? 0.0 : val;
+  }
+
+  double get _tax {
+    final val = double.tryParse(_taxController.text) ?? 0.0;
+    return val < 0 ? 0.0 : val;
+  }
+
+  void _applyDiscountPercent() {
+    final pct = double.tryParse(_discountPercentController.text) ?? 0.0;
+    if (pct > 0) {
+      final amount = _calculateSubtotal() * (pct / 100.0);
+      setState(() {
+        _discountController.text = amount.toStringAsFixed(2);
+      });
+    }
+  }
+
+  void _applyTaxPercent() {
+    final pct = double.tryParse(_taxPercentController.text) ?? 0.0;
+    if (pct > 0) {
+      final afterDiscount = _calculateSubtotal() - _discount;
+      final amount = afterDiscount * (pct / 100.0);
+      setState(() {
+        _taxController.text = amount.toStringAsFixed(2);
+      });
+    }
   }
 
   void _saveChanges() {
@@ -70,8 +95,9 @@ class _ReviewInspectionDetailScreenState
       otherRepairs: otherRepairs,
       otherNotes: otherNotes,
       totalCost: totalCost,
-      laborCost: _laborCost,
+      laborCost: 0.0,
       discount: _discount,
+      tax: _tax,
     );
     storage.saveData();
 
@@ -83,7 +109,7 @@ class _ReviewInspectionDetailScreenState
     );
   }
 
-  double _calculateMaterialsCost() {
+  double _calculateSubtotal() {
     double total = 0.0;
     for (Repair repair in zoneRepairs) {
       total += repair.totalCost;
@@ -95,8 +121,8 @@ class _ReviewInspectionDetailScreenState
   }
 
   double _calculateTotalCost() {
-    final subtotal = _calculateMaterialsCost() + _laborCost;
-    final total = subtotal - _discount;
+    final subtotal = _calculateSubtotal();
+    final total = subtotal - _discount + _tax;
     return total < 0 ? 0.0 : total;
   }
 
@@ -603,14 +629,14 @@ class _ReviewInspectionDetailScreenState
                         child: Row(
                           children: [
                             Icon(Icons.settings_remote,
-                                size: 18, color: Colors.teal.shade700),
+                                size: 18, color: const Color(0xFF0EA5E9)),
                             const SizedBox(width: 6),
                             Text(
                               'Controller ${controller.controllerNumber}',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.teal.shade700,
+                                color: const Color(0xFF0EA5E9),
                               ),
                             ),
                             if (controller.location.isNotEmpty) ...[
@@ -747,29 +773,17 @@ class _ReviewInspectionDetailScreenState
               const SizedBox(height: 16),
             ],
 
-            // Labor & Discount
+            // Discount & Tax
             const Text(
-              'Labor & Discount',
+              'Discount & Tax',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
+            // Discount row with % calculator
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _laborCostController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Labor Cost',
-                      prefixIcon: Icon(Icons.engineering),
-                      prefixText: '\$',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
+                  flex: 2,
                   child: TextField(
                     controller: _discountController,
                     keyboardType: const TextInputType.numberWithOptions(
@@ -781,6 +795,62 @@ class _ReviewInspectionDetailScreenState
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _discountPercentController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: '%',
+                      suffixText: '%',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.calculate, color: Colors.green),
+                  tooltip: 'Apply discount %',
+                  onPressed: _applyDiscountPercent,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Tax row with % calculator
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _taxController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Tax',
+                      prefixIcon: Icon(Icons.receipt_long),
+                      prefixText: '+\$',
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _taxPercentController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: '%',
+                      suffixText: '%',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.calculate, color: Colors.blue),
+                  tooltip: 'Apply tax %',
+                  onPressed: _applyTaxPercent,
                 ),
               ],
             ),
@@ -797,21 +867,11 @@ class _ReviewInspectionDetailScreenState
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Materials:'),
+                        const Text('Subtotal:'),
                         Text(
-                            '\$${_calculateMaterialsCost().toStringAsFixed(2)}'),
+                            '\$${_calculateSubtotal().toStringAsFixed(2)}'),
                       ],
                     ),
-                    if (_laborCost > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Labor:'),
-                          Text('\$${_laborCost.toStringAsFixed(2)}'),
-                        ],
-                      ),
-                    ],
                     if (_discount > 0) ...[
                       const SizedBox(height: 4),
                       Row(
@@ -821,6 +881,16 @@ class _ReviewInspectionDetailScreenState
                               style: TextStyle(color: Colors.green)),
                           Text('-\$${_discount.toStringAsFixed(2)}',
                               style: const TextStyle(color: Colors.green)),
+                        ],
+                      ),
+                    ],
+                    if (_tax > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Tax:'),
+                          Text('+\$${_tax.toStringAsFixed(2)}'),
                         ],
                       ),
                     ],
@@ -850,13 +920,13 @@ class _ReviewInspectionDetailScreenState
 
             const SizedBox(height: 24),
 
-            // Approve & Send
+            // Send Quote
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _approveAndSendQuote,
                 icon: const Icon(Icons.send),
-                label: const Text('Approve & Send Quote to Client'),
+                label: const Text('Send Quote'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,

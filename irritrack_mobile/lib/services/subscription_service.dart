@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,9 +62,10 @@ class SubscriptionService {
 
     if (subscriptionJson != null) {
       try {
-        final Map<String, dynamic> json =
-            Map<String, dynamic>.from(await _parseJson(subscriptionJson));
-        _currentSubscription = Subscription.fromJson(json);
+        final Map<String, dynamic> json = _parseJson(subscriptionJson);
+        if (json.isNotEmpty) {
+          _currentSubscription = Subscription.fromJson(json);
+        }
       } catch (e) {
         print('Error loading subscription: $e');
       }
@@ -73,17 +75,10 @@ class SubscriptionService {
     await _syncWithServer();
   }
 
-  /// Parse JSON string (simple implementation)
-  Future<Map<String, dynamic>> _parseJson(String jsonString) async {
-    // Simple JSON parsing - in production use dart:convert
+  /// Parse JSON string from local storage
+  Map<String, dynamic> _parseJson(String jsonString) {
     try {
-      return Map<String, dynamic>.from(
-        (await FirebaseFirestore.instance
-            .collection('subscriptions')
-            .doc(_customerId)
-            .get())
-            .data() ?? {}
-      );
+      return Map<String, dynamic>.from(jsonDecode(jsonString) as Map);
     } catch (e) {
       return {};
     }

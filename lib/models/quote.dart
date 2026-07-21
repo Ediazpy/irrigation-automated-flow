@@ -7,6 +7,7 @@ class Quote {
   final List<QuoteLineItem> lineItems;
   final double laborCost;
   final double discount;
+  final double tax;
   final String status;
   final String? clientSignature; // Base64 encoded signature image
   final String? signedAt;
@@ -28,6 +29,7 @@ class Quote {
     required this.lineItems,
     this.laborCost = 0.0,
     this.discount = 0.0,
+    this.tax = 0.0,
     required this.status,
     this.clientSignature,
     this.signedAt,
@@ -50,23 +52,14 @@ class Quote {
   double get subtotal => materialsCost + laborCost;
 
   double get totalCost {
-    final total = subtotal - discount;
+    final total = subtotal - discount + tax;
     return total < 0 ? 0.0 : total;
   }
 
-  bool get isExpired {
-    if (expiresAt == null) return false;
-    final expiry = DateTime.tryParse(expiresAt!);
-    if (expiry == null) return false;
-    return DateTime.now().isAfter(expiry);
-  }
-
-  int get daysUntilExpiry {
-    if (expiresAt == null) return -1;
-    final expiry = DateTime.tryParse(expiresAt!);
-    if (expiry == null) return -1;
-    return expiry.difference(DateTime.now()).inDays;
-  }
+  // Expiration removed — managers use terms/notes for any time-sensitive messaging
+  bool get hasExpiration => false;
+  bool get isExpired => false;
+  int get daysUntilExpiry => -1;
 
   Map<String, dynamic> toJson() {
     return {
@@ -75,6 +68,7 @@ class Quote {
       'line_items': lineItems.map((item) => item.toJson()).toList(),
       'labor_cost': laborCost,
       'discount': discount,
+      'tax': tax,
       'status': status,
       'client_signature': clientSignature,
       'signed_at': signedAt,
@@ -102,6 +96,7 @@ class Quote {
           [],
       laborCost: (json['labor_cost'] ?? 0.0).toDouble(),
       discount: (json['discount'] ?? 0.0).toDouble(),
+      tax: (json['tax'] ?? 0.0).toDouble(),
       status: json['status'] ?? 'draft',
       clientSignature: json['client_signature'],
       signedAt: json['signed_at'],
@@ -125,6 +120,7 @@ class Quote {
     List<QuoteLineItem>? lineItems,
     double? laborCost,
     double? discount,
+    double? tax,
     String? status,
     String? clientSignature,
     String? signedAt,
@@ -146,6 +142,7 @@ class Quote {
       lineItems: lineItems ?? this.lineItems,
       laborCost: laborCost ?? this.laborCost,
       discount: discount ?? this.discount,
+      tax: tax ?? this.tax,
       status: status ?? this.status,
       clientSignature: clientSignature ?? this.clientSignature,
       signedAt: signedAt ?? this.signedAt,

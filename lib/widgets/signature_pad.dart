@@ -24,33 +24,36 @@ class SignaturePad extends StatefulWidget {
 }
 
 class _SignaturePadState extends State<SignaturePad> {
-  List<List<Offset>> _strokes = [];
+  final List<List<Offset>> _strokes = [];
   List<Offset> _currentStroke = [];
   bool _hasSignature = false;
+  Size _padSize = Size.zero;
 
-  void _onPanStart(DragStartDetails details) {
+  void _onPointerDown(PointerDownEvent event) {
     setState(() {
-      _currentStroke = [details.localPosition];
+      _currentStroke = [event.localPosition];
       _hasSignature = true;
     });
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
+  void _onPointerMove(PointerMoveEvent event) {
     setState(() {
-      _currentStroke.add(details.localPosition);
+      _currentStroke.add(event.localPosition);
     });
   }
 
-  void _onPanEnd(DragEndDetails details) {
+  void _onPointerUp(PointerUpEvent event) {
     setState(() {
-      _strokes.add(List.from(_currentStroke));
+      if (_currentStroke.isNotEmpty) {
+        _strokes.add(List.from(_currentStroke));
+      }
       _currentStroke = [];
     });
   }
 
   void _clear() {
     setState(() {
-      _strokes = [];
+      _strokes.clear();
       _currentStroke = [];
       _hasSignature = false;
     });
@@ -65,17 +68,19 @@ class _SignaturePadState extends State<SignaturePad> {
     }
 
     try {
+      final size = _padSize.isEmpty
+          ? Size(MediaQuery.of(context).size.width - 32, widget.height)
+          : _padSize;
+
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      final size = Size(MediaQuery.of(context).size.width - 32, widget.height);
 
-      // Draw white background
+      // White background
       canvas.drawRect(
         Rect.fromLTWH(0, 0, size.width, size.height),
         Paint()..color = widget.backgroundColor,
       );
 
-      // Draw strokes
       final paint = Paint()
         ..color = widget.penColor
         ..strokeWidth = widget.penWidth
@@ -84,12 +89,25 @@ class _SignaturePadState extends State<SignaturePad> {
         ..style = PaintingStyle.stroke;
 
       for (var stroke in _strokes) {
-        if (stroke.length > 1) {
+        if (stroke.length == 1) {
+          // Single tap — draw a dot
+          canvas.drawCircle(
+            stroke[0],
+            widget.penWidth / 2,
+            Paint()
+              ..color = widget.penColor
+              ..style = PaintingStyle.fill,
+          );
+        } else if (stroke.length > 1) {
+          // Use quadratic bezier for smooth curves
           final path = Path();
           path.moveTo(stroke[0].dx, stroke[0].dy);
-          for (int i = 1; i < stroke.length; i++) {
-            path.lineTo(stroke[i].dx, stroke[i].dy);
+          for (int i = 1; i < stroke.length - 1; i++) {
+            final midX = (stroke[i].dx + stroke[i + 1].dx) / 2;
+            final midY = (stroke[i].dy + stroke[i + 1].dy) / 2;
+            path.quadraticBezierTo(stroke[i].dx, stroke[i].dy, midX, midY);
           }
+          path.lineTo(stroke.last.dx, stroke.last.dy);
           canvas.drawPath(path, paint);
         }
       }
@@ -103,9 +121,11 @@ class _SignaturePadState extends State<SignaturePad> {
         widget.onSignatureComplete(base64);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving signature: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving signature: $e')),
+        );
+      }
     }
   }
 
@@ -114,36 +134,60 @@ class _SignaturePadState extends State<SignaturePad> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: widget.backgroundColor,
-            border: Border.all(color: Colors.grey.shade300, width: 2),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: GestureDetector(
-            onPanStart: _onPanStart,
-            onPanUpdate: _onPanUpdate,
-            onPanEnd: _onPanEnd,
-            child: CustomPaint(
-              painter: _SignaturePainter(
-                strokes: _strokes,
-                currentStroke: _currentStroke,
-                penColor: widget.penColor,
-                penWidth: widget.penWidth,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            _padSize = Size(constraints.maxWidth, widget.height);
+            return Container(
+              height: widget.height,
+              decoration: BoxDecoration(
+                color: widget.backgroundColor,
+                border: Border.all(color: Colors.grey.shade400, width: 2),
+                borderRadius: BorderRadius.circular(8),
               ),
-              size: Size.infinite,
-            ),
-          ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Stack(
+                  children: [
+                    // Signature drawing area using Listener for reliable pointer events
+                    Listener(
+                      onPointerDown: _onPointerDown,
+                      onPointerMove: _onPointerMove,
+                      onPointerUp: _onPointerUp,
+                      behavior: HitTestBehavior.opaque,
+                      child: CustomPaint(
+                        painter: _SignaturePainter(
+                          strokes: _strokes,
+                          currentStroke: _currentStroke,
+                          penColor: widget.penColor,
+                          penWidth: widget.penWidth,
+                        ),
+                        size: Size.infinite,
+                      ),
+                    ),
+                    // Hint text when empty
+                    if (!_hasSignature)
+                      const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.draw, size: 32, color: Color(0xFFBDBDBD)),
+                            SizedBox(height: 6),
+                            Text(
+                              'Sign here',
+                              style: TextStyle(
+                                color: Color(0xFFBDBDBD),
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
-        const SizedBox(height: 8),
-        if (!_hasSignature)
-          Center(
-            child: Text(
-              'Sign above',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-            ),
-          ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -196,33 +240,38 @@ class _SignaturePainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
-    // Draw completed strokes
-    for (var stroke in strokes) {
-      if (stroke.length > 1) {
+    void drawStroke(List<Offset> stroke) {
+      if (stroke.length == 1) {
+        canvas.drawCircle(
+          stroke[0],
+          penWidth / 2,
+          Paint()
+            ..color = penColor
+            ..style = PaintingStyle.fill,
+        );
+      } else if (stroke.length > 1) {
         final path = Path();
         path.moveTo(stroke[0].dx, stroke[0].dy);
-        for (int i = 1; i < stroke.length; i++) {
-          path.lineTo(stroke[i].dx, stroke[i].dy);
+        for (int i = 1; i < stroke.length - 1; i++) {
+          final midX = (stroke[i].dx + stroke[i + 1].dx) / 2;
+          final midY = (stroke[i].dy + stroke[i + 1].dy) / 2;
+          path.quadraticBezierTo(stroke[i].dx, stroke[i].dy, midX, midY);
         }
+        path.lineTo(stroke.last.dx, stroke.last.dy);
         canvas.drawPath(path, paint);
       }
     }
 
-    // Draw current stroke
-    if (currentStroke.length > 1) {
-      final path = Path();
-      path.moveTo(currentStroke[0].dx, currentStroke[0].dy);
-      for (int i = 1; i < currentStroke.length; i++) {
-        path.lineTo(currentStroke[i].dx, currentStroke[i].dy);
-      }
-      canvas.drawPath(path, paint);
+    for (var stroke in strokes) {
+      drawStroke(stroke);
+    }
+    if (currentStroke.isNotEmpty) {
+      drawStroke(currentStroke);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
 }
 
 /// Widget to display a signature from base64

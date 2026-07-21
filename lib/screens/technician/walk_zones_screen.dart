@@ -278,14 +278,14 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
             child: Row(
               children: [
                 Icon(Icons.settings_remote,
-                    color: Colors.teal.shade700, size: 20),
+                    color: const Color(0xFF0EA5E9), size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Controller ${controller.controllerNumber}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade700,
+                    color: const Color(0xFF0EA5E9),
                   ),
                 ),
                 if (controller.location.isNotEmpty) ...[
@@ -426,13 +426,13 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
                       children: [
                         IconButton(
                           icon:
-                              const Icon(Icons.camera_alt, color: Colors.teal),
+                              const Icon(Icons.camera_alt, color: const Color(0xFF0EA5E9)),
                           onPressed: () => _takeZonePhoto(zone.zoneNumber),
                           tooltip: 'Take Photo',
                         ),
                         IconButton(
                           icon: const Icon(Icons.photo_library,
-                              color: Colors.teal),
+                              color: const Color(0xFF0EA5E9)),
                           onPressed: () =>
                               _pickZonePhotoFromGallery(zone.zoneNumber),
                           tooltip: 'Pick from Gallery',
@@ -837,6 +837,209 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
     );
   }
 
+  // -- Add New Zone --
+
+  void _addNewZone(Property property) {
+    final descriptionController = TextEditingController();
+    final headTypeController = TextEditingController();
+    final headCountController = TextEditingController();
+
+    // Determine next zone number
+    final existingZones = property.allZones;
+    final nextZoneNumber = existingZones.isEmpty
+        ? 1
+        : existingZones.map((z) => z.zoneNumber).reduce((a, b) => a > b ? a : b) + 1;
+
+    // Determine which controller to add to
+    int selectedController = property.controllers.isNotEmpty
+        ? property.controllers.first.controllerNumber
+        : 1;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Add Zone $nextZoneNumber'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (property.controllers.length > 1) ...[
+                  DropdownButtonFormField<int>(
+                    value: selectedController,
+                    decoration: const InputDecoration(labelText: 'Controller'),
+                    items: property.controllers.map((c) {
+                      return DropdownMenuItem(
+                        value: c.controllerNumber,
+                        child: Text('Controller ${c.controllerNumber}'
+                            '${c.location.isNotEmpty ? ' (${c.location})' : ''}'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setDialogState(() {
+                        selectedController = val ?? selectedController;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'e.g., Front lawn, Back garden',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: headTypeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Head Type',
+                    hintText: 'e.g., Rotor, Spray, Drip',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: headCountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Head Count (optional)',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newZone = Zone(
+                  zoneNumber: nextZoneNumber,
+                  description: descriptionController.text.trim().isEmpty
+                      ? 'Zone $nextZoneNumber'
+                      : descriptionController.text.trim(),
+                  headType: headTypeController.text.trim(),
+                  headCount: int.tryParse(headCountController.text),
+                  controllerNumber: selectedController,
+                );
+
+                final storage = widget.authService.storage;
+
+                if (property.controllers.isNotEmpty) {
+                  // Add to the selected controller
+                  final updatedControllers = property.controllers.map((c) {
+                    if (c.controllerNumber == selectedController) {
+                      return c.copyWith(
+                        zones: [...c.zones, newZone],
+                      );
+                    }
+                    return c;
+                  }).toList();
+
+                  storage.properties[property.id] = property.copyWith(
+                    controllers: updatedControllers,
+                  );
+                } else {
+                  // Legacy: add to zones list
+                  storage.properties[property.id] = property.copyWith(
+                    zones: [...property.zones, newZone],
+                  );
+                }
+
+                storage.saveData();
+                setState(() {});
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Zone $nextZoneNumber added'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Add Zone'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _saveProgress() {
+    widget.authService.storage.saveData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Progress saved'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _submitInspection(Inspection inspectionArg) {
+    final storage = widget.authService.storage;
+    final inspection = storage.inspections[widget.inspectionId] ?? inspectionArg;
+    final bool photosRequired = storage.companySettings?.photosRequired ?? false;
+
+    if (photosRequired && inspection.totalPhotoCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Photos are required before submitting. Please take at least one photo.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    final int totalRepairs =
+        inspection.repairs.length + inspection.otherRepairs.length;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Submit Inspection'),
+        content: Text(
+          'This will complete and lock the inspection.\n\n'
+          'Repairs: $totalRepairs\n'
+          'Photos: ${inspection.totalPhotoCount}\n\n'
+          'Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final double totalCost = inspection.calculateTotalCost();
+              storage.inspections[widget.inspectionId] = inspection.copyWith(
+                status: 'review',
+                totalCost: totalCost,
+              );
+              storage.saveData();
+
+              Navigator.pop(context); // close dialog
+              // Pop back past the inspection menu — 'submitted' tells it to close too
+              Navigator.pop(context, 'submitted');
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Inspection submitted for review!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // -- Main build --
 
   @override
@@ -871,7 +1074,45 @@ class _WalkZonesScreenState extends State<WalkZonesScreen> {
               ),
           ],
         ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _addNewZone(property),
+          tooltip: 'Add New Zone',
+          child: const Icon(Icons.add_location),
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _saveProgress,
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save Progress'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _submitInspection(inspection),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Submit'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         body: ListView(
+          padding: const EdgeInsets.only(bottom: 80),
           children: [
             if (property.allZones.isNotEmpty)
               ..._buildControllerZoneWidgets(

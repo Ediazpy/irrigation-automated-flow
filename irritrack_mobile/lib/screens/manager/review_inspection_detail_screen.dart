@@ -490,10 +490,12 @@ class _ReviewInspectionDetailScreenState
               );
               storage.saveData();
 
+              // Capture messenger before popping — context is invalid after two pops
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(context); // Close dialog
               Navigator.pop(context); // Go back to review list
 
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
                   content: Text('Moved back to in-progress'),
                   backgroundColor: Colors.blue,

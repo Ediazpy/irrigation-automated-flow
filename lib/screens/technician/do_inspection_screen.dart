@@ -107,7 +107,7 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
                     leading:
                         const Icon(Icons.check_circle, color: Colors.purple),
                     title: const Text('Submit Inspection'),
-                    subtitle: const Text('Complete and lock inspection'),
+                    subtitle: const Text('Finished? Send to your manager for review'),
                     trailing: const Icon(Icons.arrow_forward),
                     onTap: () => _submitInspection(inspection),
                   ),
@@ -127,7 +127,7 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
               ),
-              child: const Text('Save and Exit'),
+              child: const Text('Save & Finish Later'),
             ),
           ),
         ],
@@ -144,7 +144,18 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
           inspectionId: widget.inspectionId,
         ),
       ),
-    ).then((_) => setState(() {}));
+    ).then((result) {
+      // Ensure data is saved after returning from walk zones
+      widget.authService.storage.saveData();
+      if (!mounted) return;
+      if (result == 'submitted') {
+        // Inspection was submitted from the walk zones screen — close this
+        // menu too and return to the home screen
+        Navigator.pop(context);
+        return;
+      }
+      setState(() {});
+    });
   }
 
   void _viewRepairs(Inspection inspection) {
@@ -326,8 +337,10 @@ class _DoInspectionScreenState extends State<DoInspectionScreen> {
     );
   }
 
-  void _submitInspection(Inspection inspection) {
+  void _submitInspection(Inspection inspectionArg) {
     final storage = widget.authService.storage;
+    // Always read latest from storage to include any walk zone changes
+    final inspection = storage.inspections[widget.inspectionId] ?? inspectionArg;
     final bool photosRequired =
         storage.companySettings?.photosRequired ?? false;
 

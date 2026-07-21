@@ -99,7 +99,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
     final buffer = StringBuffer();
 
     // Header
-    buffer.writeln('IrriTrack Monthly Report');
+    buffer.writeln('IAF Monthly Report');
     buffer.writeln('Billing Month: ${DateFormat('MMMM yyyy').format(selectedMonth)}');
     buffer.writeln('Generated: ${DateFormat('MM/dd/yyyy HH:mm').format(DateTime.now())}');
     buffer.writeln('');

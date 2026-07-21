@@ -1,0 +1,41 @@
+name: Firestore Rules Tests
+
+# Rules regressions are silent — nothing errors, data just becomes readable.
+# This suite runs the security rules against the Firestore emulator on every
+# change that could affect them.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'firestore.rules'
+      - 'test/rules/**'
+      - '.github/workflows/firestore-rules.yml'
+  pull_request:
+    paths:
+      - 'firestore.rules'
+      - 'test/rules/**'
+      - '.github/workflows/firestore-rules.yml'
+
+jobs:
+  rules-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install test dependencies
+        working-directory: test/rules
+        run: npm ci || npm install --no-audit --no-fund
+
+      - name: Run rules tests against the emulator
+        working-directory: test/rules
+        run: npm test
