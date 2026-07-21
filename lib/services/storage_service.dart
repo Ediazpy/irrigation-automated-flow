@@ -385,8 +385,14 @@ class StorageService {
     return quotes.values.where((q) => q.propertyId == propertyId).toList();
   }
 
+  /// Approved quotes whose repairs still need to be scheduled.
+  /// Quotes with a scheduled, in-progress, or completed task are handled;
+  /// a cancelled task puts the quote back in the ready-to-schedule list.
   List<Quote> getApprovedQuotesWithoutTasks() {
-    final quotesWithTasks = repairTasks.values.map((t) => t.quoteId).toSet();
+    final quotesWithTasks = repairTasks.values
+        .where((t) => t.status != 'cancelled')
+        .map((t) => t.quoteId)
+        .toSet();
     return quotes.values
         .where((q) => q.status == 'approved' && !quotesWithTasks.contains(q.id))
         .toList();

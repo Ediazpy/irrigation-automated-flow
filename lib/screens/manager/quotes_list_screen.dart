@@ -6,6 +6,7 @@ import '../../services/firestore_service.dart';
 import '../../services/quote_service.dart';
 import '../../models/quote.dart';
 import '../../models/property.dart';
+import '../../models/repair_task.dart';
 import '../../constants/status_constants.dart';
 import 'schedule_repair_screen.dart';
 
@@ -335,21 +336,25 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                 ],
               ),
 
-              // Action Button for Approved Quotes
+              // Action Button for Approved Quotes (or repair state if
+              // already scheduled/completed)
               if (quote.status == QuoteStatus.approved) ...[
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _scheduleRepairs(quote),
-                    icon: const Icon(Icons.calendar_month),
-                    label: const Text('Schedule Repairs'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                if (_taskForQuote(quote) != null)
+                  _repairStateBanner(_taskForQuote(quote)!)
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _scheduleRepairs(quote),
+                      icon: const Icon(Icons.calendar_month),
+                      label: const Text('Schedule Repairs'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ),
               ],
 
               // Resend Button for Sent Quotes
@@ -524,22 +529,26 @@ class _QuotesListScreenState extends State<QuotesListScreen>
                     ),
                   ],
 
-                  // Schedule Button for Approved
+                  // Schedule Button for Approved (or repair state if
+                  // already scheduled/completed)
                   if (quote.status == QuoteStatus.approved) ...[
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _scheduleRepairs(quote);
-                      },
-                      icon: const Icon(Icons.calendar_month),
-                      label: const Text('Schedule Repairs'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(16),
+                    if (_taskForQuote(quote) != null)
+                      _repairStateBanner(_taskForQuote(quote)!)
+                    else
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _scheduleRepairs(quote);
+                        },
+                        icon: const Icon(Icons.calendar_month),
+                        label: const Text('Schedule Repairs'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(16),
+                        ),
                       ),
-                    ),
                   ],
 
                   // Resend for Sent quotes
@@ -600,6 +609,48 @@ class _QuotesListScreenState extends State<QuotesListScreen>
         children: [
           Text(label, style: TextStyle(color: Colors.grey.shade600)),
           Text('\$${value.toStringAsFixed(2)}'),
+        ],
+      ),
+    );
+  }
+
+  /// The active (or completed) repair task for a quote, if any.
+  /// Cancelled tasks don't count — the quote can be rescheduled.
+  RepairTask? _taskForQuote(Quote quote) {
+    for (final t in widget.authService.storage.repairTasks.values) {
+      if (t.quoteId == quote.id && t.status != RepairTaskStatus.cancelled) {
+        return t;
+      }
+    }
+    return null;
+  }
+
+  /// Status banner replacing the Schedule button once repairs exist.
+  Widget _repairStateBanner(RepairTask task) {
+    final done = task.status == RepairTaskStatus.completed;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: done ? Colors.green.shade50 : Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(done ? Icons.check_circle : Icons.event,
+              size: 18,
+              color: done ? Colors.green.shade700 : Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Text(
+            done
+                ? 'Repairs completed'
+                : 'Repairs scheduled for ${task.scheduledDate}',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: done ? Colors.green.shade800 : Colors.blue.shade800,
+            ),
+          ),
         ],
       ),
     );

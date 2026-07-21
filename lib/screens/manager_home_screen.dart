@@ -310,10 +310,9 @@ class _DashboardTab extends StatelessWidget {
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
 
-    // Derived counts for "Action Required"
-    final approvedQuotes = storage.quotes.values
-        .where((q) => q.status == QuoteStatus.approved)
-        .length;
+    // Derived counts for "Action Required" — only approved quotes whose
+    // repairs haven't been scheduled yet (scheduled/completed ones are done)
+    final approvedQuotes = storage.getApprovedQuotesWithoutTasks().length;
     final totalProperties = storage.properties.length;
     final dueToSchedule = storage.inspections.values
         .where((i) => i.status == InspectionStatus.due)
@@ -1979,27 +1978,76 @@ class _QuoteCard extends StatelessWidget {
                   ],
                   const SizedBox(height: 20),
 
-                  // Approved: schedule repairs
+                  // Approved: schedule repairs — unless a task already
+                  // exists (scheduled or done), then show its state instead
                   if (quote.status == QuoteStatus.approved) ...[
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        if (property != null) {
-                          onPush(ScheduleRepairScreen(
-                            authService: authService,
-                            quote: quote,
-                            property: property,
-                          ));
+                    Builder(builder: (ctx2) {
+                      RepairTask? task;
+                      for (final t
+                          in authService.storage.repairTasks.values) {
+                        if (t.quoteId == quote.id &&
+                            t.status != RepairTaskStatus.cancelled) {
+                          task = t;
+                          break;
                         }
-                      },
-                      icon: const Icon(Icons.calendar_month),
-                      label: const Text('Schedule Repairs'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.all(14)),
-                    ),
+                      }
+                      if (task == null) {
+                        return ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            if (property != null) {
+                              onPush(ScheduleRepairScreen(
+                                authService: authService,
+                                quote: quote,
+                                property: property,
+                              ));
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_month),
+                          label: const Text('Schedule Repairs'),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.all(14)),
+                        );
+                      }
+                      final done =
+                          task.status == RepairTaskStatus.completed;
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: done
+                              ? Colors.green.shade50
+                              : Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                                done
+                                    ? Icons.check_circle
+                                    : Icons.event,
+                                color: done
+                                    ? Colors.green.shade700
+                                    : Colors.blue.shade700),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                done
+                                    ? 'Repairs completed'
+                                    : 'Repairs scheduled for ${task.scheduledDate}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: done
+                                      ? Colors.green.shade800
+                                      : Colors.blue.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 8),
                   ],
 
