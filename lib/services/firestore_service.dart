@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../models/user.dart';
+import '../models/repair_item.dart';
 import '../models/property.dart';
 import '../models/inspection.dart';
 import '../models/quote.dart';
@@ -321,6 +322,35 @@ class FirestoreService {
     });
   }
 
+  // ============ REPAIR ITEMS (company price book) ============
+  // Stored on the settings/{companyId} doc so the whole team sees the same
+  // prices. Only managers may write (rules); techs read it during sync so
+  // repairs get priced correctly when logged.
+
+  Future<void> saveRepairItems(Map<String, RepairItem> items) async {
+    if (!isManager) return;
+    await _firestore.collection(_settingsCollection).doc(_requireCompany).set({
+      'repair_items': items.map((k, v) => MapEntry(k, v.toJson())),
+    }, SetOptions(merge: true));
+  }
+
+  Future<Map<String, RepairItem>> getRepairItems() async {
+    final doc = await _firestore
+        .collection(_settingsCollection)
+        .doc(_requireCompany)
+        .get();
+    final data = doc.data();
+    final raw = data == null ? null : data['repair_items'];
+    final items = <String, RepairItem>{};
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        items[key.toString()] =
+            RepairItem.fromJson(key.toString(), Map<String, dynamic>.from(value));
+      });
+    }
+    return items;
+  }
+
   // ============ COUNTERS (per-company ID allocation) ============
 
   Future<void> saveCounters({
@@ -440,6 +470,7 @@ class FirestoreService {
   /// technicians only write collections and documents they may edit.
   Future<void> uploadAllData({
     required Map<String, User> users,
+    required Map<String, RepairItem> repairItems,
     required Map<int, Property> properties,
     required Map<int, Inspection> inspections,
     required Map<int, Quote> quotes,
@@ -524,6 +555,9 @@ class FirestoreService {
     if (isManager && companySettings != null) {
       await saveCompanySettings(companySettings);
     }
+    if (isManager) {
+      await saveRepairItems(repairItems);
+    }
     await saveCounters(
       nextPropertyId: nextPropertyId,
       nextInspectionId: nextInspectionId,
@@ -544,6 +578,7 @@ class FirestoreService {
     final clients = await getAllClients();
     final invoices = isManager ? await getAllInvoices() : <int, Invoice>{};
     final companySettings = await getCompanySettings();
+    final repairItems = await getRepairItems();
     final counters = await getCounters();
 
     // Pull in any customer quote decisions made since the last sync
@@ -560,6 +595,7 @@ class FirestoreService {
       'clients': clients,
       'invoices': invoices,
       'company_settings': companySettings,
+      'repair_items': repairItems,
       'metadata': counters,
     };
   }

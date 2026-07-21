@@ -176,6 +176,7 @@ class StorageService {
     try {
       await _firestoreService.uploadAllData(
         users: users,
+        repairItems: repairItems,
         properties: properties,
         inspections: inspections,
         quotes: quotes,
@@ -211,6 +212,15 @@ class StorageService {
       clients = data['clients'] as Map<int, Client>;
       invoices = data['invoices'] as Map<int, Invoice>;
       companySettings = data['company_settings'] as CompanySettings?;
+
+      // Overlay the company price book on the default catalog so every
+      // device prices repairs the same way (defaults cover new items the
+      // cloud copy doesn't know about yet)
+      final cloudItems = data['repair_items'] as Map<String, RepairItem>;
+      if (cloudItems.isNotEmpty) {
+        _initializeRepairItems();
+        repairItems.addAll(cloudItems);
+      }
 
       final metadata = data['metadata'] as Map<String, int>;
       nextPropertyId = metadata['next_property_id'] ?? 1;
