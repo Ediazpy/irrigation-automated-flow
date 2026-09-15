@@ -42,7 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _persistEmailChoice() async {
     final prefs = await SharedPreferences.getInstance();
     if (_rememberEmail) {
-      await prefs.setString(_savedEmailKey, _emailController.text.trim().toLowerCase());
+      await prefs.setString(
+          _savedEmailKey, _emailController.text.trim().toLowerCase());
     } else {
       await prefs.remove(_savedEmailKey);
     }
@@ -64,16 +65,21 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
-    final result = await widget.authService.login(
-      _emailController.text.trim().toLowerCase(),
-      _passwordController.text,
-    );
+    // AuthService.login() is now guaranteed to resolve (timeout + catch-all
+    // added there), but this try/finally is cheap insurance against
+    // _isLoading getting stuck on the button forever if that ever regresses
+    // or something else unexpected throws here.
+    LoginResult result;
+    try {
+      result = await widget.authService.login(
+        _emailController.text.trim().toLowerCase(),
+        _passwordController.text,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
 
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
 
     if (result.success) {
       await _persistEmailChoice();
@@ -82,13 +88,15 @@ class _LoginScreenState extends State<LoginScreen> {
       if (widget.authService.isManager) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => ManagerHomeScreen(authService: widget.authService),
+            builder: (context) =>
+                ManagerHomeScreen(authService: widget.authService),
           ),
         );
       } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => TechnicianHomeScreen(authService: widget.authService),
+            builder: (context) =>
+                TechnicianHomeScreen(authService: widget.authService),
           ),
         );
       }
@@ -270,7 +278,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 4),
                         const Text(
                           'Sign in to your account to continue',
-                          style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                          style:
+                              TextStyle(fontSize: 14, color: Color(0xFF64748B)),
                         ),
                         const SizedBox(height: 24),
 
@@ -309,8 +318,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     : Icons.visibility_off_outlined,
                                 color: const Color(0xFF94A3B8),
                               ),
-                              onPressed: () =>
-                                  setState(() => _obscurePassword = !_obscurePassword),
+                              onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword),
                             ),
                           ),
                           validator: (value) {
@@ -379,7 +388,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : const Text(
                                     'Sign In',
                                     style: TextStyle(
-                                        fontSize: 16, fontWeight: FontWeight.w600),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600),
                                   ),
                           ),
                         ),
@@ -391,7 +401,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             const Expanded(child: Divider()),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
                               child: Text(
                                 'OR',
                                 style: TextStyle(
@@ -418,8 +429,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             TextButton(
                               onPressed: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) =>
-                                      SetupScreen(authService: widget.authService),
+                                  builder: (context) => SetupScreen(
+                                      authService: widget.authService),
                                 ),
                               ),
                               child: const Text('Create Account'),

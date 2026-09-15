@@ -46,19 +46,22 @@ class _SetupScreenState extends State<SetupScreen> {
 
     // Firebase Auth account + server-assigned manager role and companyId.
     // A Cloud Function creates the profile and company documents — the
-    // client never writes its own role.
-    final result = await widget.authService.registerCompany(
-      companyName: _companyController.text.trim(),
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim().toLowerCase(),
-      password: _passwordController.text,
-    );
+    // client never writes its own role. try/finally so _isLoading can't get
+    // stuck if anything throws (same class of bug just fixed in
+    // AuthService.login/registerCompany and login_screen.dart's _login).
+    LoginResult result;
+    try {
+      result = await widget.authService.registerCompany(
+        companyName: _companyController.text.trim(),
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim().toLowerCase(),
+        password: _passwordController.text,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
 
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
 
     if (!result.success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -70,14 +73,16 @@ class _SetupScreenState extends State<SetupScreen> {
     // Navigate to manager home, then immediately open settings to complete profile
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => ManagerHomeScreen(authService: widget.authService),
+        builder: (context) =>
+            ManagerHomeScreen(authService: widget.authService),
       ),
     );
 
     // Push settings screen on top so user completes company profile
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => CompanySettingsScreen(authService: widget.authService),
+        builder: (context) =>
+            CompanySettingsScreen(authService: widget.authService),
       ),
     );
   }
@@ -168,14 +173,18 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: Row(
                         children: [
                           ElevatedButton(
-                            onPressed: _isLoading ? null : details.onStepContinue,
+                            onPressed:
+                                _isLoading ? null : details.onStepContinue,
                             child: _isLoading && _currentStep == 2
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   )
-                                : Text(_currentStep == 2 ? 'Complete Setup' : 'Continue'),
+                                : Text(_currentStep == 2
+                                    ? 'Complete Setup'
+                                    : 'Continue'),
                           ),
                           if (_currentStep > 0) ...[
                             const SizedBox(width: 12),
@@ -194,7 +203,9 @@ class _SetupScreenState extends State<SetupScreen> {
                       title: const Text('Company Info'),
                       subtitle: const Text('Your business name'),
                       isActive: _currentStep >= 0,
-                      state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+                      state: _currentStep > 0
+                          ? StepState.complete
+                          : StepState.indexed,
                       content: Column(
                         children: [
                           TextFormField(
@@ -221,7 +232,9 @@ class _SetupScreenState extends State<SetupScreen> {
                       title: const Text('Admin Account'),
                       subtitle: const Text('Your login credentials'),
                       isActive: _currentStep >= 1,
-                      state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+                      state: _currentStep > 1
+                          ? StepState.complete
+                          : StepState.indexed,
                       content: Column(
                         children: [
                           TextFormField(
@@ -266,7 +279,9 @@ class _SetupScreenState extends State<SetupScreen> {
                       title: const Text('Set Password'),
                       subtitle: const Text('Secure your account'),
                       isActive: _currentStep >= 2,
-                      state: _currentStep > 2 ? StepState.complete : StepState.indexed,
+                      state: _currentStep > 2
+                          ? StepState.complete
+                          : StepState.indexed,
                       content: Column(
                         children: [
                           TextFormField(
@@ -278,7 +293,9 @@ class _SetupScreenState extends State<SetupScreen> {
                               border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
                                 icon: Icon(
-                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                  _obscurePassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -307,7 +324,9 @@ class _SetupScreenState extends State<SetupScreen> {
                               border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
                                 icon: Icon(
-                                  _obscureConfirm ? Icons.visibility : Icons.visibility_off,
+                                  _obscureConfirm
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -335,7 +354,8 @@ class _SetupScreenState extends State<SetupScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.info_outline, color: Color(0xFF0EA5E9)),
+                                const Icon(Icons.info_outline,
+                                    color: Color(0xFF0EA5E9)),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
@@ -365,13 +385,15 @@ class _SetupScreenState extends State<SetupScreen> {
                   children: [
                     Text(
                       'Already have an account? ',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                      style:
+                          TextStyle(color: Colors.grey.shade600, fontSize: 14),
                     ),
                     GestureDetector(
                       onTap: () {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
-                            builder: (_) => LoginScreen(authService: widget.authService),
+                            builder: (_) =>
+                                LoginScreen(authService: widget.authService),
                           ),
                         );
                       },

@@ -31,9 +31,22 @@ class AuthService {
         return LoginResult(
             success: false, message: 'Login failed. Please try again.');
       }
-      return await _completeSignIn(fbUser);
+      // _completeSignIn hits the network with no timeout of its own (forced
+      // token refresh, Firestore get) — same startup-hang bug as
+      // restoreSession, but here it left the Sign In button spinning
+      // forever instead of the app's initial loading screen. The
+      // catch-all below matters too: without it, anything other than
+      // FirebaseAuthException (a TimeoutException included) propagated
+      // uncaught, and login_screen.dart had no try/catch around this call
+      // either, so _isLoading never reset.
+      return await _completeSignIn(fbUser).timeout(const Duration(seconds: 15));
     } on fb.FirebaseAuthException catch (e) {
       return LoginResult(success: false, message: _friendlyAuthError(e));
+    } catch (e) {
+      return LoginResult(
+        success: false,
+        message: 'Could not sign in — check your connection and try again.',
+      );
     }
   }
 
@@ -85,7 +98,8 @@ class AuthService {
           'name': name,
         });
       }
-      return await _completeSignIn(fbUser);
+      // Same network-timeout guard as login() — see its comment.
+      return await _completeSignIn(fbUser).timeout(const Duration(seconds: 15));
     } on fb.FirebaseAuthException catch (e) {
       return LoginResult(success: false, message: _friendlyAuthError(e));
     } on FirebaseFunctionsException catch (e) {
@@ -102,6 +116,15 @@ class AuthService {
       }
       return LoginResult(
           success: false, message: e.message ?? 'Account setup failed.');
+    } catch (e) {
+      // Don't leave a half-signed-in session with no company claims, and
+      // don't leave the signup button spinning forever on e.g. a timeout.
+      await _auth.signOut();
+      return LoginResult(
+        success: false,
+        message:
+            'Could not finish signup — check your connection and try again.',
+      );
     }
   }
 
