@@ -1,3 +1,17 @@
+> ## ⚠️ DEPRECATED — DO NOT USE, DO NOT DEPLOY
+>
+> This is the **original v1 prototype** (a Python CLI converted to Flutter —
+> see `CONVERSION_SUMMARY.md`): plain-text passwords, local JSON storage, no
+> real backend. It has been superseded by the actively-developed app at the
+> **repo root** (`../lib/`), which has Firebase Auth, hardened Firestore
+> rules, multi-tenant company scoping, quotes/invoices, and everything
+> since. Do not edit this folder expecting changes to reach the real app,
+> and do not run `firebase deploy` from inside it — its `.firebaserc` is
+> deliberately pointed at an invalid project id for exactly that reason.
+> The "Live Web App" link below is stale.
+>
+> Kept only for history. Safe to delete once nobody needs to reference it.
+
 # IAF App - Irrigation Automated Flow
 
 Commercial Irrigation Management System

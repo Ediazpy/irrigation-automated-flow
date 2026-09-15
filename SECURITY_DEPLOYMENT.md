@@ -13,7 +13,7 @@ Status (deployed 2026-07-20; app was in testing phase so no data migration was n
 - ✅ 32 rules tests pass against the local emulator (`test/rules`);
   CI workflow in `.github/workflows/firestore-rules.yml`
 - ✅ `.github/workflows/deploy.yml` (GitHub Pages deploy of the old
-  local-auth `irritrack_mobile` build) disabled — manual trigger only
+  local-auth build, now `DEPRECATED_irritrack_mobile/`) disabled — manual trigger only
 - ⬜ **Cloud Functions — blocked on the Blaze plan.** Until deployed,
   "Create Account" fails at the claims step and the app has no usable
   accounts. See "Remaining step" below.

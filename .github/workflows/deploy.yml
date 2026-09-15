@@ -1,9 +1,12 @@
 name: Deploy to GitHub Pages
 
-# DISABLED (manual trigger only): this deployed irritrack_mobile/, the old
-# local-auth build, on every push. The production app now lives on Firebase
-# Hosting and is deployed via `firebase deploy --only hosting` after the
-# security hardening. Re-enable deliberately if GitHub Pages is still wanted.
+# DISABLED (manual trigger only): this deployed irritrack_mobile/ (renamed
+# DEPRECATED_irritrack_mobile/ — see its README), the old local-auth build,
+# on every push. The production app now lives on Firebase Hosting and is
+# deployed via `firebase deploy --only hosting` after the security
+# hardening. Re-enable deliberately if GitHub Pages is still wanted — but
+# note DEPRECATED_irritrack_mobile/ is unmaintained; check it still builds
+# first.
 on:
   workflow_dispatch:
 
@@ -16,7 +19,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: irritrack_mobile
+        working-directory: DEPRECATED_irritrack_mobile
 
     steps:
     - uses: actions/checkout@v4
@@ -36,4 +39,4 @@ jobs:
       uses: peaceiris/actions-gh-pages@v4
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./irritrack_mobile/build/web
+        publish_dir: ./DEPRECATED_irritrack_mobile/build/web

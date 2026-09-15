@@ -1,5 +1,9 @@
 name: irritrack_mobile
-description: IrriTrack - Field Service Management for Irrigation Systems
+description: >-
+  DEPRECATED legacy v1 prototype — see README.md. The real app is the
+  Flutter project at the repo root (also named "irritrack_mobile" here in
+  pubspec.yaml, unrelated to this folder's name — left alone to avoid
+  breaking this project's own internal package: imports).
 publish_to: 'none'
 version: 1.0.1+2
 

@@ -2,6 +2,9 @@
 
 Commercial Irrigation Management System
 
+> **Note:** `DEPRECATED_irritrack_mobile/` in this repo is an old, unmaintained
+> v1 prototype — not part of this app. See its README before touching it.
+
 ## Live Web App
 
 **Access the app at:**  https://irrigation-automated-flow.web.app
