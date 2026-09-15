@@ -28,13 +28,15 @@ void main() async {
       final uri = Uri.tryParse(href);
       if (uri != null) {
         // Check path-based URL: /quote?token=ABC
-        if (uri.path.contains('/quote') && uri.queryParameters.containsKey('token')) {
+        if (uri.path.contains('/quote') &&
+            uri.queryParameters.containsKey('token')) {
           _initialQuoteToken = uri.queryParameters['token'];
         }
         // Check hash-based URL: /#/quote?token=ABC
         if (_initialQuoteToken == null && uri.fragment.contains('token=')) {
           final fragmentUri = Uri.tryParse('/?${uri.fragment.split('?').last}');
-          if (fragmentUri != null && fragmentUri.queryParameters.containsKey('token')) {
+          if (fragmentUri != null &&
+              fragmentUri.queryParameters.containsKey('token')) {
             _initialQuoteToken = fragmentUri.queryParameters['token'];
           }
         }
@@ -87,17 +89,22 @@ class _MyAppState extends State<MyApp> {
     final authService = AuthService(storage);
     final restored = await authService.restoreSession();
 
-    // Sync from Firestore only when authenticated — rules deny anonymous reads
+    // Sync from Firestore only when authenticated — rules deny anonymous reads.
+    // Timeout guards against hanging forever on poor/no connectivity (see the
+    // note on AuthService.restoreSession for why this matters at startup).
     if (restored && storage.firestoreSyncEnabled) {
       try {
-        await storage.downloadFromFirestore();
+        await storage
+            .downloadFromFirestore()
+            .timeout(const Duration(seconds: 15));
       } catch (_) {}
     }
 
     // Auto-migrate existing property client data into Client records
     if (restored &&
         storage.clients.isEmpty &&
-        storage.properties.values.any((p) => p.clientName.isNotEmpty || p.clientEmail.isNotEmpty)) {
+        storage.properties.values
+            .any((p) => p.clientName.isNotEmpty || p.clientEmail.isNotEmpty)) {
       storage.migratePropertyClientsToClientRecords();
       await storage.saveData();
     }
@@ -106,7 +113,9 @@ class _MyAppState extends State<MyApp> {
     // deploy script; clients only read it)
     if (restored) {
       try {
-        final latestVersion = await FirestoreService().getLatestAppVersion();
+        final latestVersion = await FirestoreService()
+            .getLatestAppVersion()
+            .timeout(const Duration(seconds: 8));
         if (latestVersion != null && latestVersion != appVersion) {
           _updateAvailable = true;
         }
@@ -147,7 +156,8 @@ class _MyAppState extends State<MyApp> {
         }
 
         final authService = snapshot.data!;
-        return IrriTrackApp(authService: authService, updateAvailable: _updateAvailable);
+        return IrriTrackApp(
+            authService: authService, updateAvailable: _updateAvailable);
       },
     );
   }
@@ -158,7 +168,10 @@ class IrriTrackApp extends StatefulWidget {
   final bool updateAvailable;
   final String? quoteToken;
 
-  const IrriTrackApp({Key? key, required AuthService authService, this.updateAvailable = false})
+  const IrriTrackApp(
+      {Key? key,
+      required AuthService authService,
+      this.updateAvailable = false})
       : authService = authService,
         quoteToken = null,
         super(key: key);
@@ -195,7 +208,8 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.system_update, size: 48, color: Color(0xFF0EA5E9)),
+        icon:
+            const Icon(Icons.system_update, size: 48, color: Color(0xFF0EA5E9)),
         title: const Text('Update Available'),
         content: const Text(
           'A new version of the app is available. Please refresh to get the latest features and fixes.',
@@ -244,10 +258,10 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
     }
 
     // Brand colors – clean light blue (Jobber-inspired layout)
-    const Color primaryBlue  = Color(0xFF0EA5E9);   // sky-500 light blue
-    const Color secondaryBlue = Color(0xFF0284C7);  // sky-600 darker accent
-    const Color darkText     = Color(0xFF1F2937);   // near-black text
-    const Color bgColor      = Color(0xFFF8FAFC);   // slate-50 background
+    const Color primaryBlue = Color(0xFF0EA5E9); // sky-500 light blue
+    const Color secondaryBlue = Color(0xFF0284C7); // sky-600 darker accent
+    const Color darkText = Color(0xFF1F2937); // near-black text
+    const Color bgColor = Color(0xFFF8FAFC); // slate-50 background
 
     return MaterialApp(
       title: 'Irrigation Automated Flow',
@@ -266,30 +280,47 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
         scaffoldBackgroundColor: bgColor,
 
         // ── Typography ──────────────────────────────────────────────────────
-        textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).copyWith(
+        textTheme:
+            GoogleFonts.interTextTheme(ThemeData.light().textTheme).copyWith(
           headlineLarge: GoogleFonts.inter(
-            fontSize: 32, fontWeight: FontWeight.w700, color: darkText,
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            color: darkText,
           ),
           headlineMedium: GoogleFonts.inter(
-            fontSize: 24, fontWeight: FontWeight.w700, color: darkText,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: darkText,
           ),
           headlineSmall: GoogleFonts.inter(
-            fontSize: 20, fontWeight: FontWeight.w600, color: darkText,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: darkText,
           ),
           titleLarge: GoogleFonts.inter(
-            fontSize: 18, fontWeight: FontWeight.w600, color: darkText,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: darkText,
           ),
           titleMedium: GoogleFonts.inter(
-            fontSize: 16, fontWeight: FontWeight.w500, color: darkText,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: darkText,
           ),
           bodyLarge: GoogleFonts.inter(
-            fontSize: 16, fontWeight: FontWeight.w400, color: const Color(0xFF374151),
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+            color: const Color(0xFF374151),
           ),
           bodyMedium: GoogleFonts.inter(
-            fontSize: 14, fontWeight: FontWeight.w400, color: const Color(0xFF6B7280),
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: const Color(0xFF6B7280),
           ),
           labelLarge: GoogleFonts.inter(
-            fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.2,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
           ),
         ),
 
@@ -326,9 +357,11 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
             elevation: 0,
             backgroundColor: primaryBlue,
             foregroundColor: Colors.white,
-            textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+            textStyle:
+                GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
 
@@ -337,9 +370,11 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
           style: OutlinedButton.styleFrom(
             foregroundColor: primaryBlue,
             side: const BorderSide(color: Color(0xFFD1D5DB)),
-            textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
+            textStyle:
+                GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
 
@@ -347,7 +382,8 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: primaryBlue,
-            textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500),
+            textStyle:
+                GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500),
           ),
         ),
 
@@ -355,7 +391,8 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -378,8 +415,10 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
 
         // ── Tab Bar ──────────────────────────────────────────────────────────
         tabBarTheme: TabBarThemeData(
-          labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
-          unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 13),
+          labelStyle:
+              GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+          unselectedLabelStyle:
+              GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 13),
           labelColor: primaryBlue,
           unselectedLabelColor: const Color(0xFF6B7280),
           indicatorColor: primaryBlue,
@@ -392,7 +431,8 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
           unselectedItemColor: const Color(0xFF9CA3AF),
           type: BottomNavigationBarType.fixed,
           elevation: 8,
-          selectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 11),
+          selectedLabelStyle:
+              GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 11),
           unselectedLabelStyle: GoogleFonts.inter(fontSize: 11),
         ),
 
@@ -412,7 +452,8 @@ class _IrriTrackAppState extends State<IrriTrackApp> {
 
         // ── Dialog ──────────────────────────────────────────────────────────
         dialogTheme: DialogThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 4,
         ),
 

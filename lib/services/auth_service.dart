@@ -28,7 +28,8 @@ class AuthService {
       );
       final fbUser = cred.user;
       if (fbUser == null) {
-        return LoginResult(success: false, message: 'Login failed. Please try again.');
+        return LoginResult(
+            success: false, message: 'Login failed. Please try again.');
       }
       return await _completeSignIn(fbUser);
     } on fb.FirebaseAuthException catch (e) {
@@ -72,7 +73,8 @@ class AuthService {
       }
       final fbUser = cred.user;
       if (fbUser == null) {
-        return LoginResult(success: false, message: 'Signup failed. Please try again.');
+        return LoginResult(
+            success: false, message: 'Signup failed. Please try again.');
       }
 
       // Only bootstrap a company if this account doesn't belong to one yet
@@ -89,14 +91,17 @@ class AuthService {
     } on FirebaseFunctionsException catch (e) {
       // Don't leave a half-signed-in session with no company claims
       await _auth.signOut();
-      if (e.code == 'not-found' || e.code == 'internal' || e.code == 'unavailable') {
+      if (e.code == 'not-found' ||
+          e.code == 'internal' ||
+          e.code == 'unavailable') {
         return LoginResult(
           success: false,
           message: 'Account setup service is unavailable right now. '
               'Your email and password are saved — try again later.',
         );
       }
-      return LoginResult(success: false, message: e.message ?? 'Account setup failed.');
+      return LoginResult(
+          success: false, message: e.message ?? 'Account setup failed.');
     }
   }
 
@@ -119,7 +124,9 @@ class AuthService {
 
   /// Manager-only: change another user's role (updates claims server-side).
   Future<void> setUserRole(String uid, String role) async {
-    await _functions.httpsCallable('setUserRole').call({'uid': uid, 'role': role});
+    await _functions
+        .httpsCallable('setUserRole')
+        .call({'uid': uid, 'role': role});
   }
 
   /// Manager-only: archive/unarchive a user. Archiving also disables the
@@ -141,18 +148,37 @@ class AuthService {
   }
 
   /// Restore a persisted Firebase Auth session (if any) and load the profile.
+  ///
+  /// Both steps below hit the network with no built-in timeout
+  /// (authStateChanges' first event, and inside _completeSignIn:
+  /// getIdToken(true) forces a token refresh, getUserProfile does a
+  /// Firestore get()). On poor/no connectivity either can hang far longer
+  /// than a user will wait, and since main.dart awaits restoreSession()
+  /// with no timeout of its own, that left the startup spinner stuck
+  /// forever instead of falling back to the login screen. Timeouts here
+  /// guarantee this always resolves.
   Future<bool> restoreSession() async {
-    final fbUser = await _auth.authStateChanges().first;
+    fb.User? fbUser;
+    try {
+      fbUser = await _auth
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      return false;
+    }
     if (fbUser == null) return false;
     try {
-      final result = await _completeSignIn(fbUser, syncData: false);
+      final result = await _completeSignIn(fbUser, syncData: false)
+          .timeout(const Duration(seconds: 15));
       return result.success;
     } catch (_) {
       return false;
     }
   }
 
-  Future<LoginResult> _completeSignIn(fb.User fbUser, {bool syncData = true}) async {
+  Future<LoginResult> _completeSignIn(fb.User fbUser,
+      {bool syncData = true}) async {
     // Force-refresh so newly assigned custom claims are on the token
     await fbUser.getIdToken(true);
     await FirestoreService().refreshClaims();
@@ -168,7 +194,7 @@ class AuthService {
         message: hasCompany
             ? 'Your account is not fully set up. Contact your manager.'
             : 'Your company setup is incomplete. Tap "Create Account" and '
-              'sign up again with this email and password to finish it.',
+                'sign up again with this email and password to finish it.',
       );
     }
     if (profile.isArchived) {
