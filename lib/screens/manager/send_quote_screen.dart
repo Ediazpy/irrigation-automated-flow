@@ -528,6 +528,7 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
         _showSendOptions(finalQuote, message);
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error ${_isEditing ? 'updating' : 'creating'} quote: $e'),
@@ -535,7 +536,7 @@ class _SendQuoteScreenState extends State<SendQuoteScreen> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

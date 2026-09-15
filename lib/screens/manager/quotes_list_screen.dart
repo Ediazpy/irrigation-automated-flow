@@ -793,6 +793,7 @@ class _QuotesListScreenState extends State<QuotesListScreen>
 
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Email app opened'),
@@ -800,6 +801,7 @@ class _QuotesListScreenState extends State<QuotesListScreen>
         ),
       );
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not open email app'),
@@ -816,6 +818,7 @@ class _QuotesListScreenState extends State<QuotesListScreen>
 
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('SMS app opened'),
@@ -823,6 +826,7 @@ class _QuotesListScreenState extends State<QuotesListScreen>
         ),
       );
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Could not open SMS app'),

@@ -45,12 +45,14 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
       final pub = await FirestoreService().getPublicQuote(widget.accessToken);
       if (pub != null) {
         final quoteJson = Map<String, dynamic>.from(pub['quote'] as Map? ?? {});
-        var quote = Quote.fromJson((pub['quote_id'] as num?)?.toInt() ?? 0, quoteJson);
+        var quote =
+            Quote.fromJson((pub['quote_id'] as num?)?.toInt() ?? 0, quoteJson);
         // The flat fields on the public doc are the live approval state
         quote = quote.copyWith(
           status: pub['status'] as String? ?? quote.status,
           viewedAt: pub['viewed_at'] as String? ?? quote.viewedAt,
-          clientSignature: pub['client_signature'] as String? ?? quote.clientSignature,
+          clientSignature:
+              pub['client_signature'] as String? ?? quote.clientSignature,
           signedAt: pub['signed_at'] as String? ?? quote.signedAt,
           clientNotes: pub['client_notes'] as String? ?? quote.clientNotes,
         );
@@ -59,9 +61,11 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
 
         // Mark as viewed on first open
         if (_quote!.viewedAt == null &&
-            (_quote!.status == QuoteStatus.sent || _quote!.status == QuoteStatus.viewed)) {
+            (_quote!.status == QuoteStatus.sent ||
+                _quote!.status == QuoteStatus.viewed)) {
           final viewedAt = DateTime.now().toIso8601String();
-          _quote = _quote!.copyWith(status: QuoteStatus.viewed, viewedAt: viewedAt);
+          _quote =
+              _quote!.copyWith(status: QuoteStatus.viewed, viewedAt: viewedAt);
           try {
             await FirestoreService().updatePublicQuote(widget.accessToken, {
               'status': QuoteStatus.viewed,
@@ -79,7 +83,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
     if (_quote!.isExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This quote has expired and can no longer be approved.'),
+          content:
+              Text('This quote has expired and can no longer be approved.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -92,7 +97,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
     if (_quote!.isExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This quote has expired and can no longer be approved.'),
+          content:
+              Text('This quote has expired and can no longer be approved.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -115,7 +121,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not submit approval. Check your connection and try again.'),
+          content: Text(
+              'Could not submit approval. Check your connection and try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -149,73 +156,94 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
     }
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         final reasonController = TextEditingController();
-        return AlertDialog(
-          title: const Text('Decline Quote'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Please let us know why you\'re declining this quote:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Reason for declining (optional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final notes = reasonController.text.trim().isEmpty
-                    ? 'Declined by client'
-                    : reasonController.text.trim();
-
-                try {
-                  await FirestoreService().updatePublicQuote(widget.accessToken, {
-                    'status': QuoteStatus.rejected,
-                    'client_notes': notes,
-                  });
-                } catch (_) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not submit. Check your connection and try again.'),
-                      backgroundColor: Colors.red,
+        var isSubmitting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Decline Quote'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                      'Please let us know why you\'re declining this quote:'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    enabled: !isSubmitting,
+                    decoration: const InputDecoration(
+                      hintText: 'Reason for declining (optional)',
+                      border: OutlineInputBorder(),
                     ),
-                  );
-                  return;
-                }
-
-                _quote = _quote!.copyWith(
-                  status: QuoteStatus.rejected,
-                  clientNotes: notes,
-                );
-
-                if (!mounted) return;
-                Navigator.pop(context);
-                setState(() {});
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Quote has been declined'),
-                    backgroundColor: Colors.red,
                   ),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Decline Quote'),
-            ),
-          ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setDialogState(() => isSubmitting = true);
+                          final notes = reasonController.text.trim().isEmpty
+                              ? 'Declined by client'
+                              : reasonController.text.trim();
+
+                          try {
+                            await FirestoreService()
+                                .updatePublicQuote(widget.accessToken, {
+                              'status': QuoteStatus.rejected,
+                              'client_notes': notes,
+                            });
+                          } catch (_) {
+                            setDialogState(() => isSubmitting = false);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Could not submit. Check your connection and try again.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
+                          _quote = _quote!.copyWith(
+                            status: QuoteStatus.rejected,
+                            clientNotes: notes,
+                          );
+
+                          if (!mounted) return;
+                          Navigator.pop(context);
+                          setState(() {});
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Quote has been declined'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Decline Quote'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -314,11 +342,13 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
             if (_quote!.status == QuoteStatus.approved)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 color: Colors.green.shade50,
                 child: Column(
                   children: [
-                    Icon(Icons.check_circle, color: Colors.green.shade700, size: 40),
+                    Icon(Icons.check_circle,
+                        color: Colors.green.shade700, size: 40),
                     const SizedBox(height: 8),
                     Text(
                       'Quote Approved',
@@ -332,7 +362,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
                     Text(
                       'Thank you for your approval! We will be in touch to schedule your service.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.green.shade700, fontSize: 13),
+                      style:
+                          TextStyle(color: Colors.green.shade700, fontSize: 13),
                     ),
                   ],
                 ),
@@ -340,7 +371,8 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
             else if (_quote!.status == QuoteStatus.rejected)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 color: Colors.red.shade50,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -453,8 +485,7 @@ class _ClientQuoteScreenState extends State<ClientQuoteScreen> {
                       _totalRow('Labor', _quote!.laborCost),
                     if (_quote!.discount > 0)
                       _totalRow('Discount', -_quote!.discount),
-                    if (_quote!.tax > 0)
-                      _totalRow('Tax', _quote!.tax),
+                    if (_quote!.tax > 0) _totalRow('Tax', _quote!.tax),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
